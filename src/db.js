@@ -7,14 +7,17 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'CardScannerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
 export function getDB() {
+  if (typeof indexedDB === 'undefined') {
+    return Promise.resolve(null);
+  }
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, newVersion, transaction) {
         // Cards store
         if (!db.objectStoreNames.contains('cards')) {
           const cardStore = db.createObjectStore('cards', { keyPath: 'id' });
@@ -26,6 +29,11 @@ export function getDB() {
         // Company layout memory store (for Step 8 tap-to-assign heuristics)
         if (!db.objectStoreNames.contains('company_layouts')) {
           db.createObjectStore('company_layouts', { keyPath: 'company' });
+        }
+
+        // Knowledge pack & learning store (for Step 11 dynamic rules and learning loop)
+        if (!db.objectStoreNames.contains('knowledge')) {
+          db.createObjectStore('knowledge', { keyPath: 'key' });
         }
       }
     });
@@ -124,3 +132,34 @@ export async function getCompanyLayout(company) {
   const db = await getDB();
   return db.get('company_layouts', normalized);
 }
+
+/**
+ * Save knowledge item into IndexedDB
+ * @param {string} key
+ * @param {any} value
+ */
+export async function saveKnowledgeKey(key, value) {
+  const db = await getDB();
+  if (!db) return;
+  await db.put('knowledge', { key, value, updatedAt: new Date().toISOString() });
+}
+
+export async function getKnowledgeKey(key) {
+  const db = await getDB();
+  if (!db) return null;
+  const entry = await db.get('knowledge', key);
+  return entry ? entry.value : null;
+}
+
+export async function getAllKnowledge() {
+  const db = await getDB();
+  if (!db) return [];
+  return db.getAll('knowledge');
+}
+
+export async function clearKnowledgeStore() {
+  const db = await getDB();
+  if (!db) return;
+  return db.clear('knowledge');
+}
+

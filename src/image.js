@@ -189,39 +189,17 @@ export function makeGrayscaleContrast(canvas) {
     else if (g >= pHigh) norm = 255;
     else norm = Math.round(((g - pLow) / range) * 255);
 
-    // Sigmoid contrast curve boost
-    stretched[j] = norm < 128
-      ? Math.round((norm * norm) / 128)
-      : Math.round(255 - ((255 - norm) * (255 - norm)) / 128);
+    stretched[j] = norm;
   }
 
-  // 4. Subtle 3x3 unsharp mask sharpening to clarify small fonts/digits
-  for (let y = 0; y < height; y++) {
-    const yOffset = y * width;
-    const yTop = Math.max(0, y - 1) * width;
-    const yBottom = Math.min(height - 1, y + 1) * width;
-
-    for (let x = 0; x < width; x++) {
-      const idx = yOffset + x;
-      const xLeft = Math.max(0, x - 1);
-      const xRight = Math.min(width - 1, x + 1);
-
-      const center = stretched[idx];
-      const top = stretched[yTop + x];
-      const bottom = stretched[yBottom + x];
-      const left = stretched[yOffset + xLeft];
-      const right = stretched[yOffset + xRight];
-
-      // Sharpen kernel: center * 2 - (top + bottom + left + right) * 0.25
-      const sharpVal = Math.round(center * 1.7 - (top + bottom + left + right) * 0.175);
-      const clamped = Math.max(0, Math.min(255, sharpVal));
-
-      const pixelIdx = idx * 4;
-      data[pixelIdx] = clamped;
-      data[pixelIdx + 1] = clamped;
-      data[pixelIdx + 2] = clamped;
-      // alpha data[pixelIdx + 3] preserved
-    }
+  // 4. Populate enhanced grayscale image
+  for (let j = 0; j < totalPixels; j++) {
+    const val = stretched[j];
+    const pixelIdx = j * 4;
+    data[pixelIdx] = val;
+    data[pixelIdx + 1] = val;
+    data[pixelIdx + 2] = val;
+    // alpha data[pixelIdx + 3] preserved
   }
 
   ctx.putImageData(imgData, 0, 0);

@@ -131,3 +131,11 @@ export async function saveRecord(record, frontImageBase64 = null, backImageBase6
 export async function updateRecord(id, record) {
   return callBackend('update', { id, record });
 }
+
+/**
+ * Retrieve dynamic rules from Sheet tab "Rules" for Knowledge Pack
+ */
+export async function getKnowledgeRules() {
+  return callBackend('getKnowledge');
+}
+

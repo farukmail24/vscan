@@ -30,14 +30,26 @@ export function renderScan(container) {
     <div class="scan-view-content">
       <!-- Mode & Batch Bar -->
       <div class="card-panel" style="padding: 12px 16px; margin-bottom: 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <label class="form-label" style="margin: 0; font-size: 0.75rem;">Mode:</label>
-            <select id="scan-mode-select" class="form-select" style="padding: 4px 8px; width: auto; font-size: 0.85rem;">
-              <option value="auto" ${settings.mode === 'auto' ? 'selected' : ''}>Auto (AI / Offline)</option>
-              <option value="ai" ${settings.mode === 'ai' ? 'selected' : ''}>Gemini AI Only</option>
-              <option value="offline" ${settings.mode === 'offline' ? 'selected' : ''}>Offline OCR Only</option>
-            </select>
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label class="form-label" style="margin: 0; font-size: 0.75rem;">Mode:</label>
+              <select id="scan-mode-select" class="form-select" style="padding: 4px 8px; width: auto; font-size: 0.82rem;">
+                <option value="auto" ${settings.mode === 'auto' ? 'selected' : ''}>Auto (AI / Offline)</option>
+                <option value="ai" ${settings.mode === 'ai' ? 'selected' : ''}>Gemini AI Only</option>
+                <option value="offline" ${settings.mode === 'offline' ? 'selected' : ''}>Offline OCR Only</option>
+              </select>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 6px;" title="Language engine for Offline OCR">
+              <label class="form-label" style="margin: 0; font-size: 0.75rem;">OCR:</label>
+              <select id="scan-ocr-lang-select" class="form-select" style="padding: 4px 8px; width: auto; font-size: 0.82rem;">
+                <option value="auto" ${(settings.ocrLang || 'auto') === 'auto' ? 'selected' : ''}>⚡ Auto (Fast)</option>
+                <option value="eng" ${settings.ocrLang === 'eng' ? 'selected' : ''}>English</option>
+                <option value="ben" ${settings.ocrLang === 'ben' ? 'selected' : ''}>বাংলা</option>
+                <option value="eng+ben" ${settings.ocrLang === 'eng+ben' ? 'selected' : ''}>Eng + বাংলা</option>
+              </select>
+            </div>
           </div>
 
           <div class="switch-container" title="Continuous batch scan mode">
@@ -192,10 +204,18 @@ export function renderScan(container) {
   const backInfoText = container.querySelector('#back-info-text');
 
   // Mode & Batch event listeners
+  const ocrLangSelect = container.querySelector('#scan-ocr-lang-select');
   modeSelect.addEventListener('change', () => {
     updateSetting('mode', modeSelect.value);
     showToast(`Mode set to ${modeSelect.value.toUpperCase()}`, 'info', 2000);
   });
+
+  if (ocrLangSelect) {
+    ocrLangSelect.addEventListener('change', () => {
+      updateSetting('ocrLang', ocrLangSelect.value);
+      showToast(`OCR Engine: ${ocrLangSelect.options[ocrLangSelect.selectedIndex].text}`, 'info', 2000);
+    });
+  }
 
   batchToggle.addEventListener('change', () => {
     updateSetting('batchMode', batchToggle.checked);
@@ -326,9 +346,10 @@ export function renderScan(container) {
           if (currentMode === 'auto') {
             showToast(`AI extraction failed (${aiErr.message}). Falling back to Offline OCR...`, 'warning', 4000);
             updateProgress(30, 'Falling back to offline OCR...', 'Initializing local models');
+            const chosenLang = ocrLangSelect ? ocrLangSelect.value : (settings.ocrLang || 'auto');
             const offlineRes = await extractOffline(frontMeta.canvas, (pct, msg) => {
               updateProgress(pct, msg, 'Self-hosted Tesseract & jsQR');
-            });
+            }, chosenLang);
             extractedData = offlineRes.data;
             source = offlineRes.source;
             ocrLines = offlineRes.lines;
@@ -339,10 +360,11 @@ export function renderScan(container) {
         }
       } else {
         // Offline OCR mode
-        updateProgress(10, 'Running offline OCR engine...', 'Self-hosted Tesseract.js (eng+ben)');
+        const chosenLang = ocrLangSelect ? ocrLangSelect.value : (settings.ocrLang || 'auto');
+        updateProgress(10, `Running offline OCR engine (${chosenLang})...`, 'Self-hosted Tesseract.js & jsQR');
         const offlineRes = await extractOffline(frontMeta.canvas, (pct, msg) => {
           updateProgress(pct, msg, 'Self-hosted Tesseract & jsQR');
-        });
+        }, chosenLang);
         extractedData = offlineRes.data;
         source = offlineRes.source;
         ocrLines = offlineRes.lines;

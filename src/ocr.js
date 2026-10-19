@@ -8,27 +8,26 @@ import jsQR from 'jsqr';
 import { makeGrayscaleContrast } from './image.js';
 import { parseCardText, parseVCard } from './parser.js';
 
-let tesseractWorker = null;
-let isInitializingWorker = false;
-let initPromise = null;
+const workers = {};
+const workerInitPromises = {};
 
 /**
- * Initializes and caches the Tesseract worker with self-hosted assets
+ * Initializes and caches the Tesseract worker with self-hosted assets for a specific language
+ * @param {string} lang - 'eng' | 'ben' | 'eng+ben'
  * @param {Function} onProgress - Progress reporting callback (0 - 100)
  */
-async function getWorker(onProgress) {
-  if (tesseractWorker) return tesseractWorker;
+async function getWorker(lang = 'eng', onProgress) {
+  if (workers[lang]) return workers[lang];
 
-  if (isInitializingWorker && initPromise) {
-    return initPromise;
+  if (workerInitPromises[lang]) {
+    return workerInitPromises[lang];
   }
 
-  isInitializingWorker = true;
-  initPromise = (async () => {
+  workerInitPromises[lang] = (async () => {
     try {
-      if (onProgress) onProgress(10, 'Loading OCR models...');
+      if (onProgress) onProgress(10, `Loading OCR models (${lang})...`);
 
-      const worker = await createWorker('eng+ben', 1, {
+      const worker = await createWorker(lang, 1, {
         workerPath: '/tesseract/worker.min.js',
         corePath: '/tesseract/tesseract-core-simd-lstm.wasm.js',
         langPath: '/tesseract/lang-data',
@@ -43,15 +42,12 @@ async function getWorker(onProgress) {
         }
       });
 
-      tesseractWorker = worker;
-      isInitializingWorker = false;
+      workers[lang] = worker;
       return worker;
     } catch (err) {
-      isInitializingWorker = false;
-      console.warn('Local tesseract assets failed, falling back to standard CDN configuration:', err);
+      console.warn(`Local tesseract assets failed for ${lang}, falling back to standard CDN configuration:`, err);
 
-      // Graceful fallback to default CDN if local wasm environment has strict MIME requirements
-      const fallbackWorker = await createWorker('eng+ben', 1, {
+      const fallbackWorker = await createWorker(lang, 1, {
         logger: (m) => {
           if (m.status === 'recognizing text' && onProgress) {
             const pct = Math.min(99, Math.round(30 + m.progress * 65));
@@ -59,12 +55,14 @@ async function getWorker(onProgress) {
           }
         }
       });
-      tesseractWorker = fallbackWorker;
+      workers[lang] = fallbackWorker;
       return fallbackWorker;
+    } finally {
+      delete workerInitPromises[lang];
     }
   })();
 
-  return initPromise;
+  return workerInitPromises[lang];
 }
 
 /**
@@ -110,10 +108,12 @@ export function reconstructLayoutLines(words) {
   const cleanWords = words.filter(w => {
     const txt = (w.text || '').trim();
     if (!txt) return false;
-    if (w.confidence < 40) return false;
+    if (w.confidence < 45) return false;
     if (w.confidence < 75 && txt.length <= 2 && !/[0-9]/.test(txt)) return false;
+    // Discard tokens starting with bracket and mixed alphanumeric (e.g. '(DP4', '(2', 'AS')
+    if (/^[(\[{\\|][a-zA-Z0-9]{1,3}$/.test(txt)) return false;
     // Skip small isolated icon symbols (envelope, location pin, bullets, copyright)
-    if (/^[©®@•*~০oO()[\\]>|-]$/.test(txt) && w.bbox && (w.bbox.x1 - w.bbox.x0) < 35 && (w.bbox.y1 - w.bbox.y0) < 35) {
+    if (/^[©®@•*~০oO()[\]>|:;,\-\\/!]$/.test(txt) && w.bbox && (w.bbox.x1 - w.bbox.x0) < 35 && (w.bbox.y1 - w.bbox.y0) < 35) {
       return false;
     }
     return true;
@@ -170,7 +170,6 @@ export function reconstructLayoutLines(words) {
   // 4. Assemble lines top-to-bottom within each column
   const allLines = [];
   columns.forEach((colWords, colIdx) => {
-    // Sort words top to bottom, then left to right
     colWords.sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0);
 
     const colLines = [];
@@ -220,8 +219,7 @@ export function reconstructLayoutLines(words) {
         }
         text += w.text;
       }
-      // Clean leading icon artifacts like ©, ®, •, etc.
-      line.text = text.replace(/^[©®•*~০>\-–|]+\s*/, '').trim();
+      line.text = text.replace(/^[|/\\:;!~•*©®€><০,\-–_]+\s*/, '').trim();
       line.id = `line_c${colIdx}_${lineIdx}`;
       line.columnIndex = colIdx;
     });
@@ -235,12 +233,13 @@ export function reconstructLayoutLines(words) {
 
 /**
  * Perform offline extraction on an image canvas
- * First checks QR for vCard, then runs enhanced Tesseract OCR
+ * First checks QR for vCard, then runs enhanced Tesseract OCR with intelligent language selection
  * @param {HTMLCanvasElement} originalCanvas
  * @param {Function} onProgress - (percent: number, message: string) => void
+ * @param {string} ocrLang - 'auto' | 'eng' | 'ben' | 'eng+ben'
  * @returns {Promise<{ data: object, text: string, lines: Array, source: string, isQr: boolean }>}
  */
-export async function extractOffline(originalCanvas, onProgress = () => {}) {
+export async function extractOffline(originalCanvas, onProgress = () => {}, ocrLang = 'auto') {
   // Step 1: Scan for QR / vCard
   onProgress(5, 'Checking for QR code / vCard...');
   const qrResult = scanQrCode(originalCanvas);
@@ -255,21 +254,34 @@ export async function extractOffline(originalCanvas, onProgress = () => {}) {
     };
   }
 
-  // Step 2: Preprocess canvas for Tesseract (grayscale + contrast stretch)
+  // Step 2: Preprocess canvas for Tesseract (grayscale + linear contrast stretch)
   onProgress(15, 'Enhancing image contrast...');
   const enhancedCanvas = makeGrayscaleContrast(originalCanvas);
 
-  // Step 3: Run Tesseract OCR
-  const worker = await getWorker(onProgress);
+  // Step 3: Run OCR with intelligent language selection
+  const primaryLang = ocrLang === 'auto' ? 'eng' : ocrLang;
+  const worker = await getWorker(primaryLang, onProgress);
 
-  onProgress(30, 'Recognizing card text (English + Bengali)...');
-  const ret = await worker.recognize(enhancedCanvas);
+  onProgress(30, `Recognizing card text (${primaryLang === 'eng' ? 'English' : primaryLang})...`);
+  let ret = await worker.recognize(enhancedCanvas);
+
+  // Auto-detect check: if in auto mode and 'eng' yielded poor confidence (< 60) or detected Bengali characters,
+  // fall back to 'eng+ben' so Bengali cards are never missed!
+  if (ocrLang === 'auto' && (ret.data.confidence < 60 || /[\u0980-\u09FF]/.test(ret.data.text || ''))) {
+    onProgress(55, 'Analyzing multilingual text (English + Bengali)...');
+    try {
+      const bothWorker = await getWorker('eng+ben', onProgress);
+      const bothRet = await bothWorker.recognize(enhancedCanvas);
+      if (bothRet.data.confidence > ret.data.confidence || /[\u0980-\u09FF]/.test(bothRet.data.text || '')) {
+        ret = bothRet;
+      }
+    } catch (_) {}
+  }
 
   // Step 4: Reconstruct lines with column & spatial layout analysis
   onProgress(85, 'Analyzing card layout & columns...');
   const structuredLines = reconstructLayoutLines(ret.data.words || []);
 
-  // If spatial reconstruction yielded lines, use them; otherwise fallback to ret.data.lines
   const lines = structuredLines.length > 0 ? structuredLines : (ret.data.lines || []).map((line, idx) => ({
     id: `line_${idx}`,
     text: line.text.trim(),
@@ -294,11 +306,13 @@ export async function extractOffline(originalCanvas, onProgress = () => {}) {
 }
 
 /**
- * Terminate worker if necessary to free up memory
+ * Terminate all active workers to free up memory
  */
 export async function terminateWorker() {
-  if (tesseractWorker) {
-    await tesseractWorker.terminate();
-    tesseractWorker = null;
+  for (const lang of Object.keys(workers)) {
+    try {
+      await workers[lang].terminate();
+    } catch (_) {}
+    delete workers[lang];
   }
 }

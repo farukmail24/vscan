@@ -82,6 +82,9 @@ function doPost(e) {
       case 'update':
         return handleUpdate(body);
 
+      case 'getKnowledge':
+        return handleGetKnowledge();
+
       default:
         return createJsonResponse({ ok: false, error: 'Unknown action: ' + action });
     }
@@ -278,12 +281,12 @@ function handleCheckDuplicate(body) {
   const emailsToCheck = (body.emails || []).map(function(e) { return (e || '').trim().toLowerCase(); }).filter(Boolean);
   const phonesToCheck = (body.phones || []).map(function(p) { return normalizePhoneForMatch(p); }).filter(Boolean);
 
-  const emailColIdx = HEADERS.indexOf('Email');
-  const phone1ColIdx = HEADERS.indexOf('Phone 1');
-  const phone2ColIdx = HEADERS.indexOf('Phone 2');
-  const idColIdx = HEADERS.indexOf('ID');
-  const nameColIdx = HEADERS.indexOf('Name');
-  const companyColIdx = HEADERS.indexOf('Company');
+  const emailColIdx = HEADERS.indexOf('Email'); // 7
+  const phone1ColIdx = HEADERS.indexOf('Phone 1'); // 5
+  const phone2ColIdx = HEADERS.indexOf('Phone 2'); // 6
+  const idColIdx = HEADERS.indexOf('ID'); // 0
+  const nameColIdx = HEADERS.indexOf('Name'); // 2
+  const companyColIdx = HEADERS.indexOf('Company'); // 4
 
   const matches = [];
   const matchedIds = {};
@@ -377,6 +380,7 @@ function handleSave(body, scriptProps) {
           backImageUrl = backFile.getUrl();
         }
       } catch (driveErr) {
+        // Fallback: log or store notes about drive failure without failing save
         frontImageUrl = 'Drive Error: ' + driveErr.message;
       }
     }
@@ -442,7 +446,7 @@ function handleUpdate(body) {
   let targetRowIndex = -1;
   for (let i = 1; i < data.length; i++) {
     if (data[i][idColIdx] === id) {
-      targetRowIndex = i + 1;
+      targetRowIndex = i + 1; // 1-indexed for Sheets
       break;
     }
   }
@@ -458,6 +462,7 @@ function handleUpdate(body) {
   const website = Array.isArray(record.websites) ? record.websites[0] : (record.website || '');
   const tags = Array.isArray(record.tags) ? record.tags.join(', ') : (record.tags || '');
 
+  // Keep existing image URLs if not provided
   const existingRow = data[targetRowIndex - 1];
   const frontImage = record.frontImageUrl || existingRow[HEADERS.indexOf('Front Image')] || '';
   const backImage = record.backImageUrl || existingRow[HEADERS.indexOf('Back Image')] || '';
@@ -488,16 +493,48 @@ function handleUpdate(body) {
 }
 
 /**
- * Setup function: Creates or validates the "Cards" tab with header row
+ * Knowledge Pack: Returns dynamic parsing rules from "Rules" tab
+ */
+function handleGetKnowledge() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Rules');
+  if (!sheet) {
+    return createJsonResponse({ ok: true, rules: [] });
+  }
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) {
+    return createJsonResponse({ ok: true, rules: [] });
+  }
+
+  const rules = [];
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const type = String(row[0] || '').trim();
+    const val = String(row[1] || '').trim();
+    const extra = String(row[2] || '').trim();
+    if (type && val) {
+      rules.push({ type: type, value: val, extra: extra });
+    }
+  }
+
+  return createJsonResponse({ ok: true, rules: rules, count: rules.length });
+}
+
+/**
+ * Setup function: Creates or validates the "Cards" and "Rules" tabs with header rows
  */
 function setup() {
-  const sheet = getOrCreateCardsSheet();
-  const range = sheet.getRange(1, 1, 1, HEADERS.length);
+  const cardsSheet = getOrCreateCardsSheet();
+  const range = cardsSheet.getRange(1, 1, 1, HEADERS.length);
   range.setValues([HEADERS]);
   range.setFontWeight('bold');
   range.setBackground('#f3f4f6');
-  sheet.setFrozenRows(1);
-  Logger.log('Cards sheet setup complete with headers: ' + HEADERS.join(', '));
+  cardsSheet.setFrozenRows(1);
+
+  // Setup Rules sheet for dynamic knowledge packs
+  const rulesSheet = getOrCreateRulesSheet();
+  Logger.log('Setup complete: Cards and Rules sheets configured.');
 }
 
 /**
@@ -516,11 +553,38 @@ function getOrCreateCardsSheet() {
 }
 
 /**
+ * Helper to get or create the "Rules" sheet
+ */
+function getOrCreateRulesSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Rules');
+  const rulesHeaders = ['Type', 'Value', 'Extra'];
+  if (!sheet) {
+    sheet = ss.insertSheet('Rules');
+    sheet.getRange(1, 1, 1, rulesHeaders.length).setValues([rulesHeaders]);
+    sheet.getRange(1, 1, 1, rulesHeaders.length).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, rulesHeaders.length).setBackground('#e0e7ff');
+    sheet.setFrozenRows(1);
+
+    // Seed with helpful sample rules
+    const seedRules = [
+      ['designation', 'Managing Director', ''],
+      ['company', 'Provise Limited', ''],
+      ['ocr_confusion', 'Techno1ogy', 'Technology']
+    ];
+    sheet.getRange(2, 1, seedRules.length, 3).setValues(seedRules);
+  }
+  return sheet;
+}
+
+/**
  * Normalizes phone numbers for duplicate checking
  */
 function normalizePhoneForMatch(phone) {
   if (!phone) return '';
+  // Remove non-digit characters
   const digits = phone.toString().replace(/\\D/g, '');
+  // Keep last 10 digits for matching BD numbers (e.g. 017xxxxxxxx vs +88017xxxxxxxx)
   if (digits.length >= 10) {
     return digits.slice(-10);
   }

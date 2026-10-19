@@ -77,6 +77,9 @@ function doPost(e) {
       case 'update':
         return handleUpdate(body);
 
+      case 'getKnowledge':
+        return handleGetKnowledge();
+
       default:
         return createJsonResponse({ ok: false, error: 'Unknown action: ' + action });
     }
@@ -485,16 +488,48 @@ function handleUpdate(body) {
 }
 
 /**
- * Setup function: Creates or validates the "Cards" tab with header row
+ * Knowledge Pack: Returns dynamic parsing rules from "Rules" tab
+ */
+function handleGetKnowledge() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Rules');
+  if (!sheet) {
+    return createJsonResponse({ ok: true, rules: [] });
+  }
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) {
+    return createJsonResponse({ ok: true, rules: [] });
+  }
+
+  const rules = [];
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const type = String(row[0] || '').trim();
+    const val = String(row[1] || '').trim();
+    const extra = String(row[2] || '').trim();
+    if (type && val) {
+      rules.push({ type: type, value: val, extra: extra });
+    }
+  }
+
+  return createJsonResponse({ ok: true, rules: rules, count: rules.length });
+}
+
+/**
+ * Setup function: Creates or validates the "Cards" and "Rules" tabs with header rows
  */
 function setup() {
-  const sheet = getOrCreateCardsSheet();
-  const range = sheet.getRange(1, 1, 1, HEADERS.length);
+  const cardsSheet = getOrCreateCardsSheet();
+  const range = cardsSheet.getRange(1, 1, 1, HEADERS.length);
   range.setValues([HEADERS]);
   range.setFontWeight('bold');
   range.setBackground('#f3f4f6');
-  sheet.setFrozenRows(1);
-  Logger.log('Cards sheet setup complete with headers: ' + HEADERS.join(', '));
+  cardsSheet.setFrozenRows(1);
+
+  // Setup Rules sheet for dynamic knowledge packs
+  const rulesSheet = getOrCreateRulesSheet();
+  Logger.log('Setup complete: Cards and Rules sheets configured.');
 }
 
 /**
@@ -508,6 +543,31 @@ function getOrCreateCardsSheet() {
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
     sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
     sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/**
+ * Helper to get or create the "Rules" sheet
+ */
+function getOrCreateRulesSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Rules');
+  const rulesHeaders = ['Type', 'Value', 'Extra'];
+  if (!sheet) {
+    sheet = ss.insertSheet('Rules');
+    sheet.getRange(1, 1, 1, rulesHeaders.length).setValues([rulesHeaders]);
+    sheet.getRange(1, 1, 1, rulesHeaders.length).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, rulesHeaders.length).setBackground('#e0e7ff');
+    sheet.setFrozenRows(1);
+
+    // Seed with helpful sample rules
+    const seedRules = [
+      ['designation', 'Managing Director', ''],
+      ['company', 'Provise Limited', ''],
+      ['ocr_confusion', 'Techno1ogy', 'Technology']
+    ];
+    sheet.getRange(2, 1, seedRules.length, 3).setValues(seedRules);
   }
   return sheet;
 }

@@ -6,7 +6,8 @@
  */
 
 import { getSettings, saveSettings } from '../settings.js';
-import { pingBackend } from '../api.js';
+import { pingBackend, getKnowledgeRules } from '../api.js';
+import { getKnowledgeSummary, resetLearnedKnowledge, syncKnowledgeFromBackend } from '../knowledge.js';
 import { getPendingCards, markCardSynced } from '../db.js';
 import { openModal } from './modal.js';
 import { showToast } from './toast.js';
@@ -81,6 +82,20 @@ export function renderSettings(container) {
             </select>
           </div>
 
+          <!-- Offline OCR Language -->
+          <div class="form-group">
+            <label class="form-label" for="setting-ocr-lang">Offline OCR Language Engine</label>
+            <select id="setting-ocr-lang" class="form-select">
+              <option value="auto" ${(currentSettings.ocrLang || 'auto') === 'auto' ? 'selected' : ''}>⚡ Auto (Fast English first, Bengali fallback)</option>
+              <option value="eng" ${currentSettings.ocrLang === 'eng' ? 'selected' : ''}>English Only (Fastest, zero Bengali artifacts)</option>
+              <option value="ben" ${currentSettings.ocrLang === 'ben' ? 'selected' : ''}>বাংলা Only (Pure Bengali cards)</option>
+              <option value="eng+ben" ${currentSettings.ocrLang === 'eng+ben' ? 'selected' : ''}>English + বাংলা (Bilingual cards)</option>
+            </select>
+            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
+              Auto মোডে ইংরেজি কার্ডে বিদ্যুৎগতিতে নির্ভুল ফল পাওয়া যায় এবং লোগোর দাগকে বাংলা বর্ণ হিসেবে ভুল পড়া রোধ করে।
+            </div>
+          </div>
+
           <!-- Theme -->
           <div class="form-group">
             <label class="form-label" for="setting-theme">App Color Theme</label>
@@ -122,6 +137,47 @@ export function renderSettings(container) {
 
       <!-- Test Connection Result Box -->
       <div id="test-result-box" class="card-panel" style="display: none; padding: 12px 16px;"></div>
+
+      <!-- Knowledge Base & Learning Engine Card -->
+      <div class="card-panel">
+        <div class="card-title">
+          <span>🧠 Knowledge Base & Learning Engine</span>
+          <span class="badge badge-offline">Offline Enhancer</span>
+        </div>
+
+        <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+          অফলাইন OCR-এর নির্ভুলতা বাড়াতে এটি পদবি, কোম্পানি সাফিক্স এবং ইউজারের সংশোধন থেকে স্বয়ংক্রিয়ভাবে শেখে। Google Sheet-এর <strong>"Rules"</strong> ট্যাব থেকেও নতুন নিয়ম লাইভ সিঙ্ক করা যায়।
+        </p>
+
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px;">
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px;">
+            <div style="font-size: 0.7rem; color: var(--text-muted);">পদবি (Designations)</div>
+            <div id="stat-designations" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px;">
+            <div style="font-size: 0.7rem; color: var(--text-muted);">পরিচিত কোম্পানি (Fuzzy)</div>
+            <div id="stat-companies" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px;">
+            <div style="font-size: 0.7rem; color: var(--text-muted);">ঠিকানা শব্দভাণ্ডার</div>
+            <div id="stat-addresses" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px;">
+            <div style="font-size: 0.7rem; color: var(--text-muted);">OCR ভুল সংশোধন ম্যাপ</div>
+            <div id="stat-confusions" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button type="button" id="sync-rules-btn" class="btn btn-secondary btn-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Sync Rules from Google Sheet
+          </button>
+          <button type="button" id="reset-knowledge-btn" class="btn btn-secondary btn-sm" style="color: var(--accent-rose); border-color: rgba(244, 63, 94, 0.3);">
+            Reset Learned Knowledge to Default
+          </button>
+        </div>
+      </div>
 
       <!-- Sync & Data Tools Card -->
       <div class="card-panel">
@@ -175,6 +231,7 @@ export function renderSettings(container) {
     const token = container.querySelector('#setting-token').value.trim();
     const scannedBy = container.querySelector('#setting-scanned-by').value.trim();
     const mode = container.querySelector('#setting-mode').value;
+    const ocrLang = container.querySelector('#setting-ocr-lang').value;
     const theme = container.querySelector('#setting-theme').value;
     const uploadImagesToDrive = container.querySelector('#setting-upload-images').checked;
 
@@ -183,6 +240,7 @@ export function renderSettings(container) {
       appToken: token,
       scannedBy,
       mode,
+      ocrLang,
       theme,
       uploadImagesToDrive
     });
@@ -297,16 +355,78 @@ export function renderSettings(container) {
     showToast(`Sync complete! ${synced} cards uploaded.`, 'success');
   };
 
+  // Update Knowledge Base Stats
+  function updateKnowledgeStats() {
+    const summary = getKnowledgeSummary();
+    const desigEl = container.querySelector('#stat-designations');
+    const compEl = container.querySelector('#stat-companies');
+    const addrEl = container.querySelector('#stat-addresses');
+    const confEl = container.querySelector('#stat-confusions');
+
+    if (desigEl) desigEl.textContent = summary.designationsCount;
+    if (compEl) compEl.textContent = summary.knownCompaniesCount;
+    if (addrEl) addrEl.textContent = summary.addressWordsCount;
+    if (confEl) confEl.textContent = summary.ocrConfusionsCount;
+  }
+
+  updateKnowledgeStats();
+
+  // Sync Rules from Google Sheet button
+  const syncRulesBtn = container.querySelector('#sync-rules-btn');
+  if (syncRulesBtn) {
+    syncRulesBtn.onclick = async () => {
+      if (!navigator.onLine) {
+        showToast('Device is offline. Connect to internet to sync rules.', 'warning');
+        return;
+      }
+      syncRulesBtn.setAttribute('disabled', 'true');
+      syncRulesBtn.textContent = 'Syncing Rules...';
+      try {
+        const res = await getKnowledgeRules();
+        if (res && res.rules) {
+          const syncRes = await syncKnowledgeFromBackend(res.rules);
+          updateKnowledgeStats();
+          showToast(`Synced ${syncRes.added} custom rules from Google Sheet!`, 'success');
+        } else {
+          showToast('No rules found in Sheet tab "Rules".', 'info');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast(`Rule sync failed: ${err.message}`, 'error');
+      } finally {
+        syncRulesBtn.removeAttribute('disabled');
+        syncRulesBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Sync Rules from Google Sheet
+        `;
+      }
+    };
+  }
+
+  // Reset Learned Knowledge button
+  const resetKnowledgeBtn = container.querySelector('#reset-knowledge-btn');
+  if (resetKnowledgeBtn) {
+    resetKnowledgeBtn.onclick = async () => {
+      if (confirm('Reset all learned corrections and cached rules back to bundled defaults?')) {
+        await resetLearnedKnowledge();
+        updateKnowledgeStats();
+        showToast('Knowledge Base reset to default.', 'info');
+      }
+    };
+  }
+
   // Clear Local Data
   const clearBtn = container.querySelector('#clear-local-db-btn');
-  clearBtn.onclick = () => {
-    if (confirm('Are you sure? This will delete locally stored cards and reset settings.')) {
-      localStorage.clear();
-      indexedDB.deleteDatabase('CardScannerDB');
-      showToast('Local database cleared. Reloading...', 'info');
-      setTimeout(() => window.location.reload(), 1000);
-    }
-  };
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      if (confirm('Are you sure? This will delete locally stored cards and reset settings.')) {
+        localStorage.clear();
+        indexedDB.deleteDatabase('CardScannerDB');
+        showToast('Local database cleared. Reloading...', 'info');
+        setTimeout(() => window.location.reload(), 1000);
+      }
+    };
+  }
 }
 
 /**

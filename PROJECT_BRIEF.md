@@ -22,5 +22,16 @@ Goal: Mobile-first web app. User photographs a business/visiting card (front, op
 ## Sheet (tab "Cards", row 1 headers)
 ID | Timestamp | Name | Designation | Company | Phone 1 | Phone 2 | Email | Website | Address | Notes | Tags | Front Image | Back Image | Source | Needs Review | Scanned By
 
+## Sheet (tab "Rules", row 1 headers)
+Type | Value | Extra
+(Supported Types: designation, company, company_suffix, address_word, ocr_confusion)
+
 ## Extracted JSON shape
 { name, designation, company, phones[], emails[], websites[], address, notes, uncertain_fields[] }
+
+## Knowledge Pack & Self-Learning Engine (Step 11)
+- Modular JSON vocabularies in `src/knowledge/`: `designations.json`, `company_suffixes.json`, `address_words.json`, `ocr_confusions.json`, `known_companies.json`.
+- Merged with dynamic overrides in IndexedDB store `knowledge` and live synced from Google Sheet tab `Rules` via backend action `getKnowledge`.
+- High-precision Fuse.js fuzzy matching auto-corrects recognized company and designation typos.
+- Review screen learning loop automatically records user edits (designations, companies, Levenshtein OCR typos) to enhance subsequent scans.
+

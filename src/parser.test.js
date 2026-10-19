@@ -9,6 +9,12 @@ import {
   parseVCard
 } from './parser.js';
 import { reconstructLayoutLines } from './ocr.js';
+import {
+  recordLearnedCorrection,
+  applyOcrWordCorrections,
+  fuzzyMatchCompany,
+  fuzzyMatchDesignation
+} from './knowledge.js';
 
 describe('Card Text Parser & Heuristics', () => {
   it('1. Extracts standard English business card with designation and company', () => {
@@ -300,4 +306,62 @@ END:VCARD`;
     // Ensure horizontal lines did NOT merge across columns!
     expect(lineTexts.some(t => t.includes('PROVISE') && t.includes('Mail'))).toBe(false);
   });
+
+  it('18. Automatically fixes OCR character and word confusions via Knowledge Pack', () => {
+    const raw = `
+      Nafis Fuad
+      Genera1 Manager
+      Apex Techno1ogy Ltd.
+      01711223344
+    `;
+    const res = parseCardText(raw);
+    expect(res.name).toBe('Nafis Fuad');
+    // 'Genera1' with digit 1 is corrected to 'General Manager'
+    expect(res.designation).toBe('General Manager');
+    // 'Techno1ogy' with digit 1 is corrected to 'Apex Technology Ltd.'
+    expect(res.company).toBe('Apex Technology Ltd.');
+  });
+
+  it('19. High-precision Fuse.js fuzzy matching repairs misrecognized company names', () => {
+    const raw = `
+      Arafat Hossain
+      Chief Technology Officer
+      Square Pharmaceutical Ltd
+      01811223344
+    `;
+    const res = parseCardText(raw);
+    expect(res.name).toBe('Arafat Hossain');
+    // 'Square Pharmaceutical Ltd' is auto-corrected to known 'Square Pharmaceuticals Ltd.'
+    expect(res.company).toBe('Square Pharmaceuticals Ltd.');
+  });
+
+  it('20. Learning loop records user corrections and enhances subsequent offline extractions', async () => {
+    // 1. User reviews a card where OCR saw 'M4nager' and corrected it to 'Manager'
+    const learnedTypo = await recordLearnedCorrection({
+      field: 'designation',
+      originalValue: 'M4nager',
+      correctedValue: 'Manager'
+    });
+    expect(learnedTypo).toBe(true);
+
+    // 2. User adds a completely new custom designation 'Blockchain Evangelist'
+    const learnedCustom = await recordLearnedCorrection({
+      field: 'designation',
+      originalValue: 'Unclassified Line',
+      correctedValue: 'Blockchain Evangelist'
+    });
+    expect(learnedCustom).toBe(true);
+
+    // 3. Next card with 'Blockchain Evangelist' is now successfully classified as designation!
+    const nextCard = `
+      Sabbir Rahman
+      Blockchain Evangelist
+      CryptoTech Labs
+      01911223344
+    `;
+    const res = parseCardText(nextCard);
+    expect(res.name).toBe('Sabbir Rahman');
+    expect(res.designation).toBe('Blockchain Evangelist');
+  });
 });
+

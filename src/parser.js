@@ -2,7 +2,19 @@
  * Rule-based Business Card Text Parser
  * Optimized for Bangladesh & South Asian business cards (English & Bengali).
  * Extracts structured JSON matching Gemini AI output shape.
+ * Powered by dynamic Knowledge Packs and Fuse.js fuzzy entity matching.
  */
+
+import {
+  applyOcrWordCorrections,
+  fuzzyMatchCompany,
+  fuzzyMatchDesignation,
+  getDesignations,
+  getCompanySuffixes,
+  getAddressWords
+} from './knowledge.js';
+
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Bengali to English digit translation map
 const BENGALI_DIGITS = {
@@ -183,6 +195,40 @@ export function extractWebsites(text) {
 }
 
 /**
+ * Strips OCR noise artifacts, isolated stray non-Latin symbols, and punctuation debris from a line
+ */
+export function cleanArtifactsFromLine(line) {
+  if (!line || typeof line !== 'string') return '';
+  let cleaned = line.trim();
+  // 1. Strip leading pipes, slashes, bullets, icons, brackets, colons
+  cleaned = cleaned.replace(/^[|/\\:;!~•*©®€><০,\-–_]+\s*/, '');
+  // 2. Strip isolated stray Bengali glyphs before English text (e.g. '২, Md. Abul' -> 'Md. Abul')
+  cleaned = cleaned.replace(/^[০-৯অ-হ][,\s|/\\–-]+(?=[A-Za-z])/g, '');
+  // 3. Strip bracketed digits or stray 1-2 char fragments followed by whitespace EXCEPT protected honorifics (Md, Dr, Mr, Ms)
+  cleaned = cleaned.replace(/^(?!(?:Md|Dr|Mr|Ms)\b)[(\[{\\|]?[0-9a-zA-Z২-৯]{1,2}[)\]},.:;\-\\|/]+\s+/i, '');
+  // 4. Strip stray non-honorific 1-2 chars before capitalized names (e.g. 'AS Md. Abul' -> 'Md. Abul')
+  cleaned = cleaned.replace(/^(?!(?:Md|Dr|Mr|Ms)\b)[A-Za-z0-9]{1,2}\s+(?=[A-Z])/i, '');
+  // 5. Strip isolated bracketed single digit (e.g. '(2 Kashem' -> 'Kashem')
+  cleaned = cleaned.replace(/^[(\[{\\|]?[0-9২-৯][)\]}]?\s+(?=[A-Z])/i, '');
+  // 6. Strip isolated junk noise words like 'iy ', 'll ', 'ii '
+  cleaned = cleaned.replace(/^(?:iy|ii|ll|il)\s+/i, '');
+  // 7. Strip leading non-alphanumeric chars
+  cleaned = cleaned.replace(/^[^\w\u0980-\u09FF+]+/, '');
+  // 8. Strip trailing punctuation symbols
+  cleaned = cleaned.replace(/\s*[|:;!~•*©®€><()[\]/\\_–-]+$/, '');
+  return cleaned.replace(/\s{2,}/g, ' ').trim();
+}
+
+/**
+ * Splits lines where inline contact/address labels were merged horizontally across columns
+ */
+export function splitCombinedLine(line) {
+  if (!line || typeof line !== 'string') return [];
+  const splitRegex = /(?<=\S\s+)(?=[©®•*~০>\-–|]*\s*(?:mobile|phone|tel|mob|cell|mail|email|contact|web|website|address|addr|office|ঠিকানা|মোবাইল|ফোন|ইমেইল)[\s.:–-])/i;
+  return line.split(splitRegex).map(s => s.trim()).filter(Boolean);
+}
+
+/**
  * Parse card text and return structured JSON
  * @param {string} rawText - OCR output
  * @returns {object} Extracted card data
@@ -202,14 +248,19 @@ export function parseCardText(rawText) {
     };
   }
 
-  // Pre-clean lines: strip leading icon bullets, quotes, and punctuation artifacts
-  const lines = rawText
-    .split('\n')
-    .map(l => l.replace(/^[©®•*~০>\-–|]+\s*/, '').trim())
-    .filter(l => l.length > 0);
+  // Pre-clean and split lines: clean leading icon bullets, quotes, and column-merged labels
+  const lines = [];
+  rawText.split('\n').forEach(rawL => {
+    const parts = splitCombinedLine(rawL);
+    parts.forEach(p => {
+      let cleaned = cleanArtifactsFromLine(p);
+      cleaned = applyOcrWordCorrections(cleaned);
+      if (cleaned.length > 0) lines.push(cleaned);
+    });
+  });
 
   const emails = extractEmails(rawText);
-  const websites = extractWebsites(rawText, emails);
+  const websites = extractWebsites(rawText);
   const phones = extractPhones(rawText);
 
   let name = null;
@@ -224,6 +275,10 @@ export function parseCardText(rawText) {
 
   // Classified line indices
   const lineTypes = new Array(lines.length).fill(null);
+
+  // Dynamic knowledge vocabularies
+  const dynDesigs = getDesignations().allList;
+  const dynSuffixes = getCompanySuffixes().allList;
 
   // Pass 1: Identify Contact lines (phone, email, website)
   lines.forEach((line, idx) => {
@@ -261,7 +316,8 @@ export function parseCardText(rawText) {
     if (lineTypes[idx] !== null) return;
     if (NAME_PREFIX_PATTERN.test(line)) return; // Name prefix like 'Md.' is never a designation!
 
-    const isExplicitDesignation = matchesPatterns(line, DESIGNATION_PATTERNS);
+    const isExplicitDesignation = matchesPatterns(line, DESIGNATION_PATTERNS) ||
+      dynDesigs.some(d => new RegExp(`\\b${escapeRegExp(d)}\\b`, 'i').test(line));
     const isAcronymDesignation = /^(?:MD|M\.D\.|M\/D|CEO|GM|AGM|DGM|CTO|COO|CFO)$/.test(line.trim());
 
     if (!designation && (isExplicitDesignation || isAcronymDesignation)) {
@@ -274,10 +330,13 @@ export function parseCardText(rawText) {
   // Pass 4: Identify Company (supporting multi-line combinations like 'PROVISE' + 'LIMITED')
   lines.forEach((line, idx) => {
     if (lineTypes[idx] !== null) return;
-    if (matchesPatterns(line, COMPANY_PATTERNS)) {
+    const isDynSuffix = dynSuffixes.some(s => new RegExp(`\\b${escapeRegExp(s)}\\b`, 'i').test(line));
+    if (matchesPatterns(line, COMPANY_PATTERNS) || isDynSuffix) {
       let comp = line;
       // If line is just a suffix (e.g. 'LIMITED' or 'GROUP') and preceding line is an unclassified title
-      if (COMPANY_SUFFIX_ONLY.test(line.trim()) && idx > 0 && lineTypes[idx - 1] === null) {
+      const isSuffixOnly = COMPANY_SUFFIX_ONLY.test(line.trim()) ||
+        dynSuffixes.some(s => s.toLowerCase() === line.trim().toLowerCase());
+      if (isSuffixOnly && idx > 0 && lineTypes[idx - 1] === null) {
         comp = lines[idx - 1] + ' ' + line;
         lineTypes[idx - 1] = 'company';
       }
@@ -303,7 +362,13 @@ export function parseCardText(rawText) {
     }
   });
 
-  // Pass 6: Identify Name (supporting multi-line names like 'Md. Abul' + 'Kashem Akash')
+  // Pass 6: Identify Name using smart candidate scoring (proximity to designation, name prefixes, word count)
+  let bestNameCandidate = null;
+  let bestNameScore = -999;
+  let bestNameIdx = -1;
+
+  const designationIdx = lineTypes.indexOf('designation');
+
   for (let idx = 0; idx < lines.length; idx++) {
     if (lineTypes[idx] !== null) continue;
 
@@ -311,28 +376,69 @@ export function parseCardText(rawText) {
     const words = line.split(/\s+/).filter(Boolean);
     const hasDigits = /\d/.test(line);
 
-    if (!hasDigits && words.length >= 1 && words.length <= 5 && !/[@/:=]/.test(line)) {
-      let fullName = line.replace(/,\s*(?:MBBS|FCPS|MD|PhD|PMP|MBA|B\.?Sc|M\.?Sc|CPA|FCA)\b/gi, '').trim();
-      lineTypes[idx] = 'name';
+    if (hasDigits || words.length === 0 || words.length > 5 || /[@/:=]/.test(line)) {
+      continue;
+    }
 
-      // Check if subsequent line completes the name (e.g. 'Md. Abul' followed by 'Kashem Akash')
-      if (idx + 1 < lines.length && lineTypes[idx + 1] === null) {
-        const nextLine = lines[idx + 1];
-        const nextWords = nextLine.split(/\s+/).filter(Boolean);
-        const nextHasDigits = /\d/.test(nextLine);
+    let score = 0;
 
-        if (!nextHasDigits && nextWords.length >= 1 && nextWords.length <= 3 && !/[@/:=]/.test(nextLine)) {
-          const afterNextIsDesignationOrContact = (idx + 2 < lines.length) && (lineTypes[idx + 2] === 'designation' || lineTypes[idx + 2] === 'contact');
-          if (NAME_PREFIX_PATTERN.test(line) || afterNextIsDesignationOrContact) {
-            fullName += ' ' + nextLine;
-            lineTypes[idx + 1] = 'name';
-          }
+    // 1. Name prefix bonus (e.g. 'Md.', 'Mohammad', 'Dr.', 'Mr.', 'Engr.')
+    if (NAME_PREFIX_PATTERN.test(line)) {
+      score += 120;
+    }
+
+    // 2. Proximity to Designation (person name is almost always directly adjacent to designation)
+    if (designationIdx !== -1) {
+      const dist = Math.abs(idx - designationIdx);
+      if (dist === 1) score += 90;
+      else if (dist === 2) score += 60;
+      else if (dist === 3) score += 30;
+      else score -= 30;
+    }
+
+    // 3. Proper 2 to 4 word personal name
+    if (words.length >= 2 && words.length <= 4) {
+      score += 40;
+    }
+
+    // 4. Single all-caps word is usually a brand/company name (e.g. 'PROVISE', 'SONY')
+    if (words.length === 1 && line === line.toUpperCase() && line.length > 2) {
+      score -= 60;
+    }
+
+    // 5. Penalize lines with known company indicators that missed Pass 4
+    if (matchesPatterns(line, COMPANY_PATTERNS)) {
+      score -= 70;
+    }
+
+    if (score > bestNameScore) {
+      bestNameScore = score;
+      bestNameCandidate = line;
+      bestNameIdx = idx;
+    }
+  }
+
+  if (bestNameCandidate && bestNameIdx !== -1) {
+    let fullName = bestNameCandidate.replace(/,\s*(?:MBBS|FCPS|MD|PhD|PMP|MBA|B\.?Sc|M\.?Sc|CPA|FCA)\b/gi, '').trim();
+    lineTypes[bestNameIdx] = 'name';
+
+    // Check if subsequent line completes the name (e.g. 'Md. Abul' followed by 'Kashem Akash')
+    if (bestNameIdx + 1 < lines.length && lineTypes[bestNameIdx + 1] === null) {
+      const nextLine = lines[bestNameIdx + 1];
+      const nextWords = nextLine.split(/\s+/).filter(Boolean);
+      const nextHasDigits = /\d/.test(nextLine);
+
+      if (!nextHasDigits && nextWords.length >= 1 && nextWords.length <= 3 && !/[@/:=]/.test(nextLine)) {
+        const afterNextIsDesignationOrContact = (bestNameIdx + 2 < lines.length) && 
+          (lineTypes[bestNameIdx + 2] === 'designation' || lineTypes[bestNameIdx + 2] === 'contact');
+        if (NAME_PREFIX_PATTERN.test(bestNameCandidate) || afterNextIsDesignationOrContact || (designationIdx !== -1 && bestNameIdx + 2 === designationIdx)) {
+          fullName += ' ' + nextLine;
+          lineTypes[bestNameIdx + 1] = 'name';
         }
       }
-
-      name = fullName || line;
-      break;
     }
+
+    name = fullName || bestNameCandidate;
   }
 
   // Pass 7: If company still missing, look for prominent unclassified line
@@ -365,6 +471,21 @@ export function parseCardText(rawText) {
   });
 
   const notes = notesLines.length > 0 ? notesLines.join('; ') : null;
+
+  // High-confidence fuzzy entity matching against known knowledge base (e.g. 'Techno1ogy Ltd' -> 'Technology Ltd')
+  if (company) {
+    const fuzzyComp = fuzzyMatchCompany(company);
+    if (fuzzyComp.matched) {
+      company = fuzzyComp.value;
+    }
+  }
+
+  if (designation) {
+    const fuzzyDesig = fuzzyMatchDesignation(designation);
+    if (fuzzyDesig.matched) {
+      designation = fuzzyDesig.value;
+    }
+  }
 
   // Mark heuristically derived fields in uncertain_fields
   if (name) uncertain_fields.push('name');

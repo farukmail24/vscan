@@ -7,6 +7,7 @@
 import { getState, clearCurrentScan, incrementBatchCount } from '../store.js';
 import { saveRecord, checkDuplicate } from '../api.js';
 import { saveCardLocal, saveCompanyLayout, getCompanyLayout } from '../db.js';
+import { recordLearnedCorrection } from '../knowledge.js';
 import { getSettings } from '../settings.js';
 import { openImageZoomModal } from './modal.js';
 import { showToast } from './toast.js';
@@ -83,14 +84,14 @@ export function renderReview(container) {
         <div style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px;">
           ${frontBase64 ? `
             <div id="front-zoom-trigger" style="flex: 1; cursor: pointer; position: relative;">
-              <img src="${frontBase64}" alt="Card Front" style="width: 100%; height: 120px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border-color);" />
+              <img src="${frontBase64}" alt="Card Front" style="width: 100%; max-height: 180px; object-fit: contain; background: rgba(0,0,0,0.06); border-radius: var(--radius-md); border: 1px solid var(--border-color);" />
               <span style="position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,0.6); color: #fff; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px;">Front</span>
             </div>
           ` : ''}
 
           ${backBase64 ? `
             <div id="back-zoom-trigger" style="flex: 1; cursor: pointer; position: relative;">
-              <img src="${backBase64}" alt="Card Back" style="width: 100%; height: 120px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border-color);" />
+              <img src="${backBase64}" alt="Card Back" style="width: 100%; max-height: 180px; object-fit: contain; background: rgba(0,0,0,0.06); border-radius: var(--radius-md); border: 1px solid var(--border-color);" />
               <span style="position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,0.6); color: #fff; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px;">Back</span>
             </div>
           ` : ''}
@@ -411,6 +412,30 @@ export function renderReview(container) {
       saveCompanyLayout(compVal, {
         savedAt: new Date().toISOString()
       }).catch(console.warn);
+    }
+
+    // Step 11: Learning Loop - Automatically learn from user edits to enhance future OCR scans
+    try {
+      let learnedCount = 0;
+      const diffs = [
+        { field: 'name', originalValue: originalRecord.name, correctedValue: nameVal },
+        { field: 'designation', originalValue: originalRecord.designation, correctedValue: desigVal },
+        { field: 'company', originalValue: originalRecord.company, correctedValue: compVal },
+        { field: 'address', originalValue: originalRecord.address, correctedValue: addrVal }
+      ];
+
+      for (const diff of diffs) {
+        if (diff.originalValue !== diff.correctedValue) {
+          const didLearn = await recordLearnedCorrection(diff);
+          if (didLearn) learnedCount++;
+        }
+      }
+
+      if (learnedCount > 0) {
+        showToast(`🧠 Learned ${learnedCount} correction${learnedCount > 1 ? 's' : ''} to improve future scans!`, 'info', 3000);
+      }
+    } catch (learnErr) {
+      console.warn('Learning loop non-blocking error:', learnErr);
     }
 
     try {

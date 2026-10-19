@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   appToken: '',
   scannedBy: '',
   mode: 'auto', // 'auto' | 'ai' | 'offline'
+  ocrLang: 'auto', // 'auto' | 'eng' | 'ben' | 'eng+ben'
   batchMode: false,
   uploadImagesToDrive: false, // Default: false (do not upload images to Google Drive)
   theme: 'system' // 'system' | 'dark' | 'light'

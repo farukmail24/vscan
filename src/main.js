@@ -10,7 +10,8 @@ import { renderSettings, applyTheme } from './ui/settings.js';
 import { getSettings } from './settings.js';
 import { getState, subscribe, setPendingCount } from './store.js';
 import { getPendingCards, markCardSynced } from './db.js';
-import { saveRecord } from './api.js';
+import { saveRecord, getKnowledgeRules } from './api.js';
+import { initKnowledge, syncKnowledgeFromBackend } from './knowledge.js';
 import { showToast } from './ui/toast.js';
 
 // Route Definitions
@@ -239,6 +240,20 @@ function init() {
     window.location.hash = '#/scan';
   } else {
     handleRouting();
+  }
+
+  // Initialize Knowledge Pack & Self-Learning Engine
+  initKnowledge().catch(console.warn);
+
+  // Background sync knowledge rules from Sheet tab "Rules" if online
+  if (navigator.onLine && getSettings().appsScriptUrl) {
+    getKnowledgeRules()
+      .then(res => {
+        if (res && res.rules && res.rules.length > 0) {
+          syncKnowledgeFromBackend(res.rules);
+        }
+      })
+      .catch(() => {});
   }
 
   // Attempt auto-sync at startup if online
