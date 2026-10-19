@@ -10,6 +10,7 @@ import { pingBackend } from '../api.js';
 import { getPendingCards, markCardSynced } from '../db.js';
 import { openModal } from './modal.js';
 import { showToast } from './toast.js';
+import { APPS_SCRIPT_SOURCE } from '../appsScriptSource.js';
 
 export function renderSettings(container) {
   const currentSettings = getSettings();
@@ -341,14 +342,21 @@ function openSetupGuideModal() {
         <!-- Step 2 -->
         <div style="margin-bottom: 16px;">
           <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
-            ২. কোড পেস্ট করুন
+            ২. Code.gs কোড কপি ও পেস্ট করুন
           </h4>
           <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 8px;">
-            প্রজেক্টের <code>apps-script/Code.gs</code> ফাইলের কোড কপি করে Apps Script এডিটরে পেস্ট করে Save (Ctrl + S) করুন।
+            কোডটি আপনার লোকাল প্রজেক্টের <code>apps-script/Code.gs</code> ফাইলে রয়েছে। আপনি সরাসরি ফাইল থেকেও কপি করতে পারেন, অথবা নিচের বাটনে এক ক্লিকেই সম্পূর্ণ কোড ক্লিপবোর্ডে কপি করে নিতে পারেন:
           </p>
-          <button type="button" id="copy-codegs-btn" class="btn btn-secondary btn-sm" style="width: auto;">
-            📋 Code.gs ফাইলের লোকেশন দেখুন
-          </button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+            <button type="button" id="copy-codegs-btn" class="btn btn-primary btn-sm" style="width: auto; gap: 6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span id="copy-btn-text">📋 সম্পূর্ণ Code.gs কপি করুন</span>
+            </button>
+            <button type="button" id="toggle-code-preview-btn" class="btn btn-secondary btn-sm" style="width: auto;">
+              👁️ কোড প্রিভিউ দেখুন
+            </button>
+          </div>
+          <div id="code-preview-block" style="display: none; margin-top: 8px; max-height: 180px; overflow-y: auto; background: var(--bg-input); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-family: var(--font-mono); font-size: 0.72rem; white-space: pre; user-select: all;"></div>
         </div>
 
         <!-- Step 3 -->
@@ -406,9 +414,44 @@ function openSetupGuideModal() {
     `,
     onRender: (modalContainer) => {
       const copyBtn = modalContainer.querySelector('#copy-codegs-btn');
+      const copyBtnText = modalContainer.querySelector('#copy-btn-text');
       if (copyBtn) {
-        copyBtn.onclick = () => {
-          showToast('কোডটি আপনার প্রজেক্টের apps-script/Code.gs ফাইলে আছে', 'info', 3500);
+        copyBtn.onclick = async () => {
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(APPS_SCRIPT_SOURCE);
+            } else {
+              const ta = document.createElement('textarea');
+              ta.value = APPS_SCRIPT_SOURCE;
+              ta.style.position = 'fixed';
+              ta.style.left = '-9999px';
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+            }
+            copyBtn.style.backgroundColor = 'var(--accent-emerald)';
+            if (copyBtnText) copyBtnText.textContent = '✓ সম্পূর্ণ কোড কপি হয়েছে!';
+            showToast('✓ Code.gs সম্পূর্ণ কোড ক্লিপবোর্ডে কপি হয়েছে! Apps Script এডিটরে পেস্ট করুন।', 'success', 4000);
+          } catch (err) {
+            console.error('Copy failed:', err);
+            showToast('ক্লিপবোর্ডে কপি করতে সমস্যা হয়েছে, প্রিভিউ থেকে ম্যানুয়ালি কপি করুন', 'error');
+          }
+        };
+      }
+
+      const previewBtn = modalContainer.querySelector('#toggle-code-preview-btn');
+      const previewBlock = modalContainer.querySelector('#code-preview-block');
+      if (previewBtn && previewBlock) {
+        previewBtn.onclick = () => {
+          if (previewBlock.style.display === 'none') {
+            previewBlock.textContent = APPS_SCRIPT_SOURCE;
+            previewBlock.style.display = 'block';
+            previewBtn.textContent = '❌ প্রিভিউ লুকান';
+          } else {
+            previewBlock.style.display = 'none';
+            previewBtn.textContent = '👁️ কোড প্রিভিউ দেখুন';
+          }
         };
       }
     }
