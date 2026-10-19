@@ -124,12 +124,19 @@ function handleExtract(body, scriptProps) {
   }
 
   const promptText =
-    'Extract all business/visiting card contact details from this card image. ' +
-    'The card may be in English, Bengali, or a mixture of both. ' +
-    'Only extract text physically present on the card; never guess or hallucinate. ' +
-    'Keep phone numbers exactly as written on the card. ' +
-    'Identify Bangladesh specific details accurately (districts, divisions, areas like Dhaka, Gulshan, Uttara, Chattogram, etc.). ' +
-    'If any extracted field is uncertain, ambiguous, partially obscured or inferred, add that field name to uncertain_fields.';
+    'Carefully extract all visiting/business card details from this card image. ' +
+    'The card may be in English, Bengali (বাংলা), or bilingual. ' +
+    'Guidelines for highest accuracy: ' +
+    '1. name: The individual person full name printed on the card (e.g. "Md. Tanvir Hasan", "মোঃ রফিকুল ইসলাম"). Exclude company name or tagline. ' +
+    '2. designation: Job title or role (e.g. "Managing Director", "ব্যবস্থাপনা পরিচালক", "CEO", "Proprietor", "Executive"). ' +
+    '3. company: The organization, company, institution, or business name. Do not confuse slogans or brand mottos with the company name. ' +
+    '4. phones: Extract all telephone, mobile, WhatsApp, and hotline numbers as an array of strings exactly as printed. ' +
+    '5. emails: Extract all valid email addresses. ' +
+    '6. websites: Extract official websites or URLs. ' +
+    '7. address: The physical office/store address including road, house, area (e.g., Gulshan, Dhanmondi, Agrabad) and city/district. ' +
+    '8. notes: Any remaining printed services, branches, or slogans. ' +
+    '9. uncertain_fields: Add any field names whose text is blurry, truncated, or ambiguous. ' +
+    'Strictly extract only what is physically printed on the card. Do not invent or assume data.';
 
   parts.push({ text: promptText });
 

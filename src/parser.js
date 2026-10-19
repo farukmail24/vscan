@@ -11,21 +11,28 @@ const BENGALI_DIGITS = {
 };
 
 // Company indicators in English & Bengali
+// Non-name slogans, certifications and greetings to skip during Name identification
+const SLOGAN_PATTERNS = [
+  /\b(ISO\s*\d+|Quality\s+First|Excellence|Certified|Since\s+\d+|Established|Welcome|Service|Solutions|Trust|Integrity|Leading|Innovation|Global|Official|Bismillah|Alhamdulillah)\b/i,
+  /(বিসমিল্লাহ|আলহামদুলিল্লাহ|স্বাগতম|আন্তরিক|বিশ্বস্ততা|গুণগত মান|প্রতিষ্ঠিত|কোয়ালিটি)/
+];
+
+// Company indicators in English & Bengali
 const COMPANY_PATTERNS = [
-  /\b(Ltd|Limited|Corporation|Corp|Enterprise|Enterprises|Trading|Industries|Industry|Group|Solutions|& Co|Pvt|Private|Holdings|Agency|Associates|International|Technologies|Tech|Consultancy|Bank|Hospital|Pharmaceuticals|Pharma|Telecom|Logistics|Engineering)\b/i,
-  /(লিমিটেড|লিঃ|এন্টারপ্রাইজ|ট্রেডিং|ইন্ডাস্ট্রিজ|গ্রুপ|সলিউশন|কোম্পানী|কর্পোরেশন|ফার্মা|টেকনোলজি|কনসালটেন্সি|হসপিটাল|ব্যাংক)/
+  /\b(Ltd|Limited|Corporation|Corp|Enterprise|Enterprises|Trading|Traders|Industries|Industry|Group|Solutions|& Co|Pvt|Private|Pte\s*Ltd|Holdings|Agency|Associates|International|Technologies|Tech|Consultancy|Bank|Hospital|Pharmaceuticals|Pharma|Telecom|Logistics|Engineering|Textiles|Garments|Apparels|Diagnostic|Chamber|Federation|Foundation|Institute|Academy|School|College|University|Centre|Center)\b/i,
+  /(লিমিটেড|লিঃ|প্রাঃ\s*লিঃ|এন্টারপ্রাইজ|ট্রেডিং|ট্রেডার্স|ইন্ডাস্ট্রিজ|গ্রুপ|সলিউশন|কোম্পানী|কর্পোরেশন|ফার্মা|টেকনোলজি|কনসালটেন্সি|হসপিটাল|হাসপাতাল|ডায়াগনস্টিক|ব্যাংক|টেক্সটাইল|গার্মেন্টস|ফাউন্ডেশন|একাডেমি)/
 ];
 
 // Designation indicators in English & Bengali
 const DESIGNATION_PATTERNS = [
-  /\b(Chief Executive Officer|CEO|Managing Director|MD|General Manager|GM|Assistant General Manager|AGM|Deputy General Manager|DGM|Executive Director|Director|Assistant Manager|Branch Manager|Manager|Senior Executive|Executive|Senior Officer|Officer|Proprietor|Chairman|Chairperson|Vice Chairman|Partner|Founder|Co-Founder|Chief Technology Officer|CTO|Chief Operating Officer|COO|Chief Financial Officer|CFO|Software Engineer|Senior Engineer|Lead Engineer|Civil Engineer|Electrical Engineer|Engineer|Consultant|Advisor|Principal|Doctor|Advocate|Barrister|Head of [A-Za-z\s]+|Team Lead|Marketing Executive|Sales Executive)\b/i,
-  /(ব্যবস্থাপনা পরিচালক|উপ-ব্যবস্থাপনা পরিচালক|পরিচালক|ম্যানেজার|সহকারী ম্যানেজার|নির্বাহী|কর্মকর্তা|চেয়ারম্যান|ভাইস চেয়ারম্যান|স্বত্বাধিকারী|প্রোপাইটার|প্রতিষ্ঠাতা|প্রকৌশলী|প্রধান নির্বাহী|পরামর্শক|আইনজীবী|ডাক্তার)/
+  /\b(Chief Executive Officer|CEO|Managing Director|MD|General Manager|GM|Assistant General Manager|AGM|Deputy General Manager|DGM|Executive Director|Director|Assistant Manager|Branch Manager|Manager|Senior Executive|Executive|Senior Officer|Officer|Proprietor|Chairman|Chairperson|Vice Chairman|Partner|Founder|Co-Founder|Chief Technology Officer|CTO|Chief Operating Officer|COO|Chief Financial Officer|CFO|Software Engineer|Senior Engineer|Lead Engineer|Civil Engineer|Electrical Engineer|Mechanical Engineer|Engineer|Consultant|Advisor|Principal|Doctor|Dr\.|Physician|Surgeon|Advocate|Barrister|Lecturer|Professor|Assistant Professor|Associate Professor|Head of [A-Za-z\s]+|Team Lead|Marketing Executive|Sales Executive|Accountant|Accounts Officer|Merchandiser)\b/i,
+  /(ব্যবস্থাপনা পরিচালক|উপ-ব্যবস্থাপনা পরিচালক|পরিচালক|ম্যানেজার|ব্যবস্থাপক|সহকারী ম্যানেজার|নির্বাহী|কর্মকর্তা|হিসাবরক্ষণ কর্মকর্তা|চেয়ারম্যান|ভাইস চেয়ারম্যান|স্বত্বাধিকারী|প্রোপাইটার|প্রতিষ্ঠাতা|প্রকৌশলী|প্রধান নির্বাহী|পরামর্শক|আইনজীবী|অ্যাডভোকেট|ডাক্তার|অধ্যাপক|সহকারী অধ্যাপক|প্রভাষক|মার্চেন্ডাইজার)/
 ];
 
 // Address indicators in English & Bengali
 const ADDRESS_PATTERNS = [
-  /\b(Road|Rd\.?|House|H#|Block|Sector|Floor|Level|Avenue|Ave\.?|Plot|Lane|Dhaka|Chattogram|Chittagong|Uttara|Gulshan|Banani|Dhanmondi|Motijheel|Mirpur|Mohakhali|Sylhet|Khulna|Rajshahi|Barishal|Rangpur|Mymensingh|Gazipur|Narayanganj|Tejgaon|Badda|Khilkhet|Agrabad|Post Code|ZIP)\b/i,
-  /(সড়ক|রোড|বাড়ি|বাসা|হোল্ডিং|ব্লক|সেক্টর|তলা|লেভেল|প্লট|এভিনিউ|ঢাকা|চট্টগ্রাম|উত্তরা|গুলশান|বনানী|ধানমন্ডি|মতিঝিল|মিরপুর|মহাখালী|সিলেট|খুলনা|রাজশাহী|বরিশাল|রংপুর|ময়মনসিংহ|গাজীপুর|নারায়ণগঞ্জ|তেজগাঁও|আগ্রাবাদ|পোস্ট কোড)/
+  /\b(Road|Rd\.?|House|H#|Block|Sector|Floor|Level|Avenue|Ave\.?|Plot|Lane|Dhaka|Chattogram|Chittagong|Uttara|Gulshan|Banani|Dhanmondi|Motijheel|Mirpur|Mohakhali|Sylhet|Khulna|Rajshahi|Barishal|Rangpur|Mymensingh|Gazipur|Narayanganj|Tejgaon|Badda|Khilkhet|Agrabad|Nasirabad|Kawran Bazar|Wari|Baridhara|Post Code|ZIP)\b/i,
+  /(সড়ক|রোড|বাড়ি|বাসা|হোল্ডিং|ব্লক|সেক্টর|তলা|লেভেল|প্লট|এভিনিউ|ঢাকা|চট্টগ্রাম|উত্তরা|গুলশান|বনানী|ধানমন্ডি|মতিঝিল|মিরপুর|মহাখালী|সিলেট|খুলনা|রাজশাহী|বরিশাল|রংপুর|ময়মনসিংহ|গাজীপুর|নারায়ণগঞ্জ|তেজগাঁও|আগ্রাবাদ|কাওরান বাজার|বারিধারা|পোস্ট কোড)/
 ];
 
 /**
@@ -69,42 +76,47 @@ export function extractPhones(text) {
     if (!line) continue;
 
     // Check if line indicates phone
-    const hasPhoneLabel = /(?:phone|tel|mob|cell|hotline|ph|মোবাইল|ফোন|টেলিফোন)[\s.:/–-]*([^\n]+)/i.test(line);
+    const hasPhoneLabel = /(?:phone|tel|mob|cell|hotline|ph|contact|ফোন|মোবাইল|টেলিফোন)[\s.:/–-]*([^\n]+)/i.test(line);
 
-    // Look for tokens resembling phone numbers
-    // BD patterns: +8801[3-9]\d{8}, 8801[3-9]\d{8}, 01[3-9]\d{8}, 02-xxxxxxx, etc.
-    const tokens = line.split(/[,;/|]+/).map(t => t.trim()).filter(Boolean);
+    // Split tokens on commas, slashes, pipes, semicolons, and "and/or"
+    const tokens = line.split(/[,;/|]+|\s+(?:and|or|&)\s+/i).map(t => t.trim()).filter(Boolean);
 
     for (let token of tokens) {
-      // Clean OCR misreadings
       const cleaned = fixPhoneOcrConfusions(token);
 
-      // Search for mobile numbers
-      const mobileMatch = cleaned.match(/(?:\+?88\s*[-.]?)?0?1[3-9][\d\s.-]{8,11}\b/);
-      if (mobileMatch) {
-        const rawNum = mobileMatch[0].replace(/[^\d+]/g, '');
+      // Match all mobile numbers in the token (handles spaced formatting like "01711 223344" or "+880 1711-223344")
+      const mobileRegex = /(?:\+?88\s*[-.]?)?0?1[3-9][\d\s.-]{8,15}\b/g;
+      let m;
+      let matchedInToken = false;
+      while ((m = mobileRegex.exec(cleaned)) !== null) {
+        const rawNum = m[0].replace(/[^\d+]/g, '');
         const digits = rawNum.replace(/\D/g, '');
         if (digits.length === 11 && digits.startsWith('01')) {
           phones.push('+88' + digits);
+          matchedInToken = true;
         } else if (digits.length === 13 && digits.startsWith('8801')) {
           phones.push('+' + digits);
+          matchedInToken = true;
         } else if (rawNum.startsWith('+8801') && digits.length === 13) {
           phones.push(rawNum);
-        } else if (digits.length >= 10) {
+          matchedInToken = true;
+        } else if (digits.length >= 10 && digits.length <= 13) {
           phones.push(rawNum);
+          matchedInToken = true;
         }
-        continue;
       }
 
-      // Search for landlines (e.g. 02-8888888, +8802999999)
-      const landlineMatch = cleaned.match(/(?:\+?88\s*[-.]?)?0[2-9][\d\s.-]{6,10}\b/);
+      if (matchedInToken) continue;
+
+      // Match landlines (e.g. 02-8888888, 031-123456, +8802999999)
+      const landlineMatch = cleaned.match(/(?:\+?88\s*[-.]?)?0[2-9][\d\s.-]{6,12}\b/);
       if (landlineMatch) {
         const rawLandline = landlineMatch[0].trim();
         phones.push(rawLandline);
         continue;
       }
 
-      // If labeled phone line had a number
+      // If labeled phone line had a raw digit sequence
       if (hasPhoneLabel) {
         const digitSeq = cleaned.replace(/\D/g, '');
         if (digitSeq.length >= 7 && digitSeq.length <= 14) {
@@ -230,17 +242,24 @@ export function parseCardText(rawText) {
   });
 
   // Pass 2: Identify Name
-  // Top-most 2-4 word line without digits that isn't classified
+  // Top-most 1-5 word line without digits that isn't classified and isn't a slogan
   for (let idx = 0; idx < lines.length; idx++) {
     if (lineTypes[idx] !== null) continue;
 
     const line = lines[idx];
+    if (matchesPatterns(line, SLOGAN_PATTERNS)) {
+      lineTypes[idx] = 'slogan';
+      continue;
+    }
+
     const words = line.split(/\s+/).filter(Boolean);
     const hasDigits = /\d/.test(line);
 
-    // Business card names are usually 2 to 4 words (or single prominent name), without punctuation heavy symbols
+    // Business card names are usually 1 to 5 words, without URL/email punctuation
     if (!hasDigits && words.length >= 1 && words.length <= 5 && !/[@/:=]/.test(line)) {
-      name = line;
+      // Strip trailing academic degrees or professional certifications for a clean name
+      const cleanedName = line.replace(/,\s*(?:MBBS|FCPS|MD|PhD|PMP|MBA|B\.?Sc|M\.?Sc|CPA|FCA)\b/gi, '').trim();
+      name = cleanedName || line;
       lineTypes[idx] = 'name';
       break;
     }

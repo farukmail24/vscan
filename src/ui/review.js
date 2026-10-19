@@ -328,6 +328,8 @@ export function renderReview(container) {
           inputEl.value = selectedOcrLineText;
         }
         inputEl.classList.remove('is-uncertain');
+        const hint = inputEl.parentElement.querySelector('.field-hint');
+        if (hint) hint.style.display = 'none';
         showToast(`Assigned to ${targetId.replace('field-', '')}!`, 'success', 1500);
       }
     };
@@ -340,6 +342,8 @@ export function renderReview(container) {
       if (inputEl) {
         inputEl.value = '';
         inputEl.classList.remove('is-uncertain');
+        const hint = inputEl.parentElement.querySelector('.field-hint');
+        if (hint) hint.style.display = 'none';
       }
     };
   });

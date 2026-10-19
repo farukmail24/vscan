@@ -173,4 +173,43 @@ END:VCARD`;
     const resEmpty = parseCardText('');
     expect(resEmpty.name).toBeNull();
   });
+
+  it('12. Extracts spaced Bangladeshi mobile numbers with slash delimiters', () => {
+    const raw = `
+      Mob: 017 11 223344 / 018 11 556677
+      Email: test@domain.com
+    `;
+    const phones = extractPhones(raw);
+    expect(phones).toContain('+8801711223344');
+    expect(phones).toContain('+8801811556677');
+  });
+
+  it('13. Correctly rejects top-line slogans and certifications from being mistaken as Name', () => {
+    const raw = `
+      ISO 9001:2015 Certified
+      Quality First Always
+      Tariqul Islam
+      General Manager
+      Akij Logistics Ltd.
+      01700112233
+    `;
+    const res = parseCardText(raw);
+    expect(res.name).toBe('Tariqul Islam');
+    expect(res.designation).toBe('General Manager');
+    expect(res.company).toBe('Akij Logistics Ltd.');
+  });
+
+  it('14. Cleans trailing degrees/certifications from person name', () => {
+    const raw = `
+      Engr. Mahmudur Rahman, PMP
+      Executive Director
+      Ha-Meem Apparels Ltd.
+      01812345678
+      Tejgaon I/A, Dhaka
+    `;
+    const res = parseCardText(raw);
+    expect(res.name).toBe('Engr. Mahmudur Rahman');
+    expect(res.company).toBe('Ha-Meem Apparels Ltd.');
+    expect(res.address).toContain('Tejgaon');
+  });
 });
