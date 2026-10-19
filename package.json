@@ -10,7 +10,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@esbuild/win32-x64": "^0.28.2",
     "idb": "^8.0.2",
     "jsqr": "^1.4.0",
     "libphonenumber-js": "^1.11.17",
@@ -18,7 +17,6 @@
   },
   "devDependencies": {
     "@jridgewell/sourcemap-codec": "^1.6.0",
-    "@rollup/rollup-win32-x64-msvc": "^4.64.10",
     "magic-string": "^1.4.3",
     "pathe": "^2.0.3",
     "vite": "^6.2.0",
