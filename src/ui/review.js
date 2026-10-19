@@ -412,7 +412,12 @@ export function renderReview(container) {
     try {
       if (navigator.onLine && settings.appsScriptUrl) {
         // Online Save: Post to Google Apps Script
-        const backendResult = await saveRecord(compiledRecord, frontBase64, backBase64);
+        const uploadImages = !!settings.uploadImagesToDrive;
+        const backendResult = await saveRecord(
+          compiledRecord,
+          uploadImages ? frontBase64 : null,
+          uploadImages ? backBase64 : null
+        );
         
         // Save local copy with status synced
         await saveCardLocal({

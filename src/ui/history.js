@@ -7,6 +7,7 @@
 import { getAllCardsLocal, getPendingCards, markCardSynced, deleteCardLocal, saveCardLocal } from '../db.js';
 import { saveRecord, extractWithAI, updateRecord } from '../api.js';
 import { setPendingCount } from '../store.js';
+import { getSettings } from '../settings.js';
 import { openModal, openImageZoomModal } from './modal.js';
 import { showToast } from './toast.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
@@ -186,10 +187,16 @@ export async function renderHistory(container) {
         syncBtn.setAttribute('disabled', 'true');
         syncBtn.textContent = 'Syncing...';
         let syncedCount = 0;
+        const settings = getSettings();
+        const uploadImages = !!settings.uploadImagesToDrive;
 
         for (const card of pendingCards) {
           try {
-            const res = await saveRecord(card.record, card.frontBase64, card.backBase64);
+            const res = await saveRecord(
+              card.record,
+              uploadImages ? card.frontBase64 : null,
+              uploadImages ? card.backBase64 : null
+            );
             await markCardSynced(card.id, {
               row: res.row,
               frontImageUrl: res.frontImageUrl,

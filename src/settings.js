@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
   scannedBy: '',
   mode: 'auto', // 'auto' | 'ai' | 'offline'
   batchMode: false,
+  uploadImagesToDrive: false, // Default: false (do not upload images to Google Drive)
   theme: 'system' // 'system' | 'dark' | 'light'
 };
 

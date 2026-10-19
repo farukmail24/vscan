@@ -1,12 +1,14 @@
 /**
  * Settings Screen Component
  * Manages Apps Script connection, App Token, Scanner identity,
- * mode configuration, connection testing, and cache management.
+ * mode configuration, Google Drive image toggle, interactive Setup Guide modal,
+ * connection testing, and cache management.
  */
 
 import { getSettings, saveSettings } from '../settings.js';
-import { pingBackend, saveRecord } from '../api.js';
+import { pingBackend } from '../api.js';
 import { getPendingCards, markCardSynced } from '../db.js';
+import { openModal } from './modal.js';
 import { showToast } from './toast.js';
 
 export function renderSettings(container) {
@@ -14,6 +16,23 @@ export function renderSettings(container) {
 
   container.innerHTML = `
     <div class="settings-view-content">
+      <!-- Interactive Setup Guide Banner Button -->
+      <div class="card-panel" style="border-color: rgba(59, 130, 246, 0.4); background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.05)); margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+          <div>
+            <div style="font-size: 0.95rem; font-weight: 700; color: var(--accent-blue); display: flex; align-items: center; gap: 6px;">
+              <span>📖</span> Apps Script সেটআপ গাইডলাইন
+            </div>
+            <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 3px;">
+              Google Sheet, Gemini AI ও Web App URL পাওয়ার পূর্ণ নির্দেশিকা
+            </div>
+          </div>
+          <button type="button" id="open-guide-btn" class="btn btn-primary btn-sm" style="flex-shrink: 0; width: auto; padding: 6px 14px;">
+            গাইড দেখুন
+          </button>
+        </div>
+      </div>
+
       <!-- Backend Connection Card -->
       <div class="card-panel">
         <div class="card-title">
@@ -27,7 +46,7 @@ export function renderSettings(container) {
             <label class="form-label" for="setting-url">Apps Script Web App URL</label>
             <input type="url" id="setting-url" class="form-input" placeholder="https://script.google.com/macros/s/.../exec" value="${escapeHtml(currentSettings.appsScriptUrl || '')}" required />
             <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-              Deploy your Google Sheet script as a Web App (Access: Anyone) and paste the /exec URL.
+              গুগল শিটের Web App URL (যার শেষে /exec থাকে)। এটি অ্যাক্সেস: Anyone হতে হবে।
             </div>
           </div>
 
@@ -41,7 +60,7 @@ export function renderSettings(container) {
               </button>
             </div>
             <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-              Never committed to Git or exposed. Verified by doPost on your Apps Script.
+              নিরাপত্তার জন্য গোপন টোকেন। এটি Apps Script Script Properties-এর APP_TOKEN এর সাথে মিলতে হবে।
             </div>
           </div>
 
@@ -69,6 +88,24 @@ export function renderSettings(container) {
               <option value="dark" ${currentSettings.theme === 'dark' ? 'selected' : ''}>Dark Slate</option>
               <option value="light" ${currentSettings.theme === 'light' ? 'selected' : ''}>Light Clean</option>
             </select>
+          </div>
+
+          <!-- CardImages Storage Toggle (Option to skip Google Drive) -->
+          <div class="card-panel" style="padding: 12px; margin: 16px 0; background-color: rgba(255, 255, 255, 0.02); border-color: var(--border-color);">
+            <div class="switch-container">
+              <div style="padding-right: 12px;">
+                <div style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">
+                  Upload Photos to Google Drive
+                </div>
+                <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 3px; line-height: 1.4;">
+                  <strong>বন্ধ রাখলে (ডিফল্ট):</strong> গুগল ড্রাইভে কোনো ছবি জমা হবে না। সেভ হবে ১০ গুণ দ্রুত এবং ড্রাইভ স্টোরেজ সম্পূর্ণ খালি থাকবে।
+                </div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="setting-upload-images" ${currentSettings.uploadImagesToDrive ? 'checked' : ''} />
+                <span class="slider"></span>
+              </label>
+            </div>
           </div>
 
           <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -112,6 +149,12 @@ export function renderSettings(container) {
     </div>
   `;
 
+  // Open Step-by-Step Setup Guide Modal
+  const openGuideBtn = container.querySelector('#open-guide-btn');
+  if (openGuideBtn) {
+    openGuideBtn.onclick = () => openSetupGuideModal();
+  }
+
   // Toggle token password visibility
   const tokenInput = container.querySelector('#setting-token');
   const toggleTokenBtn = container.querySelector('#toggle-token-btn');
@@ -132,13 +175,15 @@ export function renderSettings(container) {
     const scannedBy = container.querySelector('#setting-scanned-by').value.trim();
     const mode = container.querySelector('#setting-mode').value;
     const theme = container.querySelector('#setting-theme').value;
+    const uploadImagesToDrive = container.querySelector('#setting-upload-images').checked;
 
     saveSettings({
       appsScriptUrl: url,
       appToken: token,
       scannedBy,
       mode,
-      theme
+      theme,
+      uploadImagesToDrive
     });
 
     // Apply theme
@@ -152,7 +197,6 @@ export function renderSettings(container) {
   const testBox = container.querySelector('#test-result-box');
 
   testBtn.onclick = async () => {
-    // Save current values first
     const url = container.querySelector('#setting-url').value.trim();
     const token = container.querySelector('#setting-token').value.trim();
 
@@ -223,10 +267,16 @@ export function renderSettings(container) {
     syncBtn.setAttribute('disabled', 'true');
     syncBtn.textContent = `Syncing ${pending.length} cards...`;
     let synced = 0;
+    const settings = getSettings();
+    const uploadImages = !!settings.uploadImagesToDrive;
 
     for (const card of pending) {
       try {
-        const res = await saveRecord(card.record, card.frontBase64, card.backBase64);
+        const res = await saveRecord(
+          card.record,
+          uploadImages ? card.frontBase64 : null,
+          uploadImages ? card.backBase64 : null
+        );
         await markCardSynced(card.id, {
           row: res.row,
           frontImageUrl: res.frontImageUrl,
@@ -256,6 +306,113 @@ export function renderSettings(container) {
       setTimeout(() => window.location.reload(), 1000);
     }
   };
+}
+
+/**
+ * Interactive Setup Guide Modal with Step-by-Step Instructions
+ */
+function openSetupGuideModal() {
+  openModal({
+    title: 'Google Apps Script সেটআপ নির্দেশিকা',
+    contentHtml: `
+      <div style="font-size: 0.85rem; line-height: 1.6; max-height: 75vh; overflow-y: auto; padding-right: 4px;">
+        <!-- CardImages Notice -->
+        <div style="background-color: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px;">
+          <div style="font-weight: 700; color: var(--accent-emerald); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+            <span>💡</span> কার্ডের ছবি (CardImages) জমা রাখতে না চাইলে:
+          </div>
+          <p style="color: var(--text-primary); font-size: 0.8rem; margin: 0;">
+            আপনি যদি গুগল ড্রাইভে কোনো ছবি রাখতে না চান, তবে Google Drive-এ <strong>কোনো ফোল্ডার তৈরি করার প্রয়োজন নেই</strong>। নিচের ধাপ ৩-এ <code>DRIVE_FOLDER_ID</code> দেওয়ার দরকার নেই। অ্যাপের সেটিংস থেকে "Upload Photos to Google Drive" সুইচটি বন্ধ রাখলেই চলবে। এতে কার্ডের টেক্সট সরাসরি গুগল শিটে সেভ হবে বিদ্যুৎ গতিতে!
+          </p>
+        </div>
+
+        <!-- Step 1 -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
+            ১. Google Sheet তৈরি ও Apps Script খোলা
+          </h4>
+          <ol style="margin-left: 20px; color: var(--text-secondary); font-size: 0.82rem;">
+            <li><a href="https://sheets.new" target="_blank" rel="noreferrer" style="color: var(--accent-blue);">sheets.new</a> এ গিয়ে নতুন গুগল শিট বানান, নাম দিন <strong>Card Scanner</strong>।</li>
+            <li>ওপরের মেনু থেকে <strong>Extensions</strong> > <strong>Apps Script</strong> এ ক্লিক করুন।</li>
+            <li>বাম পাশে প্রজেক্টের নাম দিন <strong>Card Scanner Backend</strong>।</li>
+          </ol>
+        </div>
+
+        <!-- Step 2 -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
+            ২. কোড পেস্ট করুন
+          </h4>
+          <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 8px;">
+            প্রজেক্টের <code>apps-script/Code.gs</code> ফাইলের কোড কপি করে Apps Script এডিটরে পেস্ট করে Save (Ctrl + S) করুন।
+          </p>
+          <button type="button" id="copy-codegs-btn" class="btn btn-secondary btn-sm" style="width: auto;">
+            📋 Code.gs ফাইলের লোকেশন দেখুন
+          </button>
+        </div>
+
+        <!-- Step 3 -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
+            ৩. Script Properties (গোপন কি) যোগ করুন
+          </h4>
+          <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 8px;">
+            Apps Script-এর বাম মেনুর <strong>Project Settings (⚙️)</strong> এ যান। নিচে <strong>Script Properties</strong> এ গিয়ে নিচের ৩টি কি দিন:
+          </p>
+          <div style="background: var(--bg-input); border-radius: var(--radius-sm); padding: 8px; font-family: var(--font-mono); font-size: 0.75rem;">
+            • <strong>GEMINI_API_KEY</strong>: (<a href="https://aistudio.google.com" target="_blank" rel="noreferrer" style="color: var(--accent-blue);">Google AI Studio</a> থেকে ফ্রি কি)<br/>
+            • <strong>APP_TOKEN</strong>: (আপনার পছন্দের গোপন পাসওয়ার্ড, যেমন: card_sec_123)<br/>
+            • <strong>GEMINI_MODEL</strong>: gemini-2.5-flash<br/>
+            • <em>(ছবি সেভ করতে চাইলে DRIVE_FOLDER_ID দেবেন, না চাইলে একদম প্রয়োজন নেই)</em>
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
+            ৪. setup রান ও পারমিশন দেওয়া
+          </h4>
+          <ol style="margin-left: 20px; color: var(--text-secondary); font-size: 0.82rem;">
+            <li>এডিটরে ফিরে ওপরের ফাংশন ড্রপডাউনে <strong>setup</strong> সিলেক্ট করে <strong>Run</strong> চাপুন।</li>
+            <li><strong>Review Permissions</strong> আসলে জিমেইল সিলেক্ট করে <strong>Advanced > Go to Card Scanner Backend (unsafe) > Allow</strong> চাপুন।</li>
+            <li>আপনার গুগল শিটে <strong>Cards</strong> নামের ট্যাব ও হেডার তৈরি হয়ে যাবে।</li>
+          </ol>
+        </div>
+
+        <!-- Step 5 -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
+            ৫. Web App ডেপ্লয় ও URL সংগ্রহ (জরুরি)
+          </h4>
+          <ol style="margin-left: 20px; color: var(--text-secondary); font-size: 0.82rem;">
+            <li>ওপরে ডানে <strong>Deploy</strong> > <strong>New deployment</strong> চাপুন।</li>
+            <li>Select type (⚙️) থেকে <strong>Web app</strong> বেছে নিন।</li>
+            <li><strong>Execute as:</strong> Me</li>
+            <li><strong>Who has access:</strong> <span style="color: var(--accent-amber); font-weight: 700;">Anyone</span> (এটি Anyone না দিলে অ্যাপ শিটে ডেটা পাঠাতে পারবে না!)</li>
+            <li><strong>Deploy</strong> বাটনে চাপুন এবং প্রাপ্ত <strong>/exec</strong> URL কপি করুন।</li>
+          </ol>
+        </div>
+
+        <!-- Step 6 -->
+        <div style="margin-bottom: 8px;">
+          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
+            ৬. অ্যাপের Settings-এ বসান
+          </h4>
+          <p style="font-size: 0.82rem; color: var(--text-secondary);">
+            কপি করা URL এবং আপনার APP_TOKEN এই Settings পেজের ফিল্ডে বসিয়ে <strong>Test Connection</strong> চাপুন। সবুজ টিক দেখলেই সেটআপ সম্পন্ন!
+          </p>
+        </div>
+      </div>
+    `,
+    onRender: (modalContainer) => {
+      const copyBtn = modalContainer.querySelector('#copy-codegs-btn');
+      if (copyBtn) {
+        copyBtn.onclick = () => {
+          showToast('কোডটি আপনার প্রজেক্টের apps-script/Code.gs ফাইলে আছে', 'info', 3500);
+        };
+      }
+    }
+  });
 }
 
 export function applyTheme(theme) {

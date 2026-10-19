@@ -108,9 +108,14 @@ async function autoSyncPendingCards() {
     showToast(`Online: Syncing ${pending.length} offline card(s) to Sheet...`, 'info', 2500);
 
     let synced = 0;
+    const uploadImages = !!settings.uploadImagesToDrive;
     for (const card of pending) {
       try {
-        const res = await saveRecord(card.record, card.frontBase64, card.backBase64);
+        const res = await saveRecord(
+          card.record,
+          uploadImages ? card.frontBase64 : null,
+          uploadImages ? card.backBase64 : null
+        );
         await markCardSynced(card.id, {
           row: res.row,
           frontImageUrl: res.frontImageUrl,
