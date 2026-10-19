@@ -8,6 +8,7 @@ import {
   convertBengaliDigitsToAscii,
   parseVCard
 } from './parser.js';
+import { reconstructLayoutLines } from './ocr.js';
 
 describe('Card Text Parser & Heuristics', () => {
   it('1. Extracts standard English business card with designation and company', () => {
@@ -211,5 +212,92 @@ END:VCARD`;
     expect(res.name).toBe('Engr. Mahmudur Rahman');
     expect(res.company).toBe('Ha-Meem Apparels Ltd.');
     expect(res.address).toContain('Tejgaon');
+  });
+
+  it('15. Extracts complex two-column card (Provise Limited) with multi-line name and company', () => {
+    const raw = `
+      PROVISE
+      LIMITED
+      Excellence in Garments
+      Md. Abul
+      Kashem Akash
+      Manager
+      Mobile: 01712874232
+      Mail: makakash.hi@gmail.com
+      Address: Sharifpur Rd,
+      Gazipur 1704
+    `;
+    const res = parseCardText(raw);
+    expect(res.name).toBe('Md. Abul Kashem Akash');
+    expect(res.designation).toBe('Manager');
+    expect(res.company).toBe('PROVISE LIMITED');
+    expect(res.phones).toContain('+8801712874232');
+    expect(res.emails).toContain('makakash.hi@gmail.com');
+    expect(res.websites).toEqual([]); // gmail.com must not be extracted as website
+    expect(res.address).toBe('Sharifpur Rd, Gazipur 1704');
+    expect(res.notes).toContain('Excellence in Garments');
+  });
+
+  it('16. Differentiates Md. name prefix from standalone MD (Managing Director) acronym', () => {
+    const card1 = `
+      Md. Shahidul Islam
+      Senior Executive
+      Beximco Pharma
+      01711223344
+    `;
+    const res1 = parseCardText(card1);
+    expect(res1.name).toBe('Md. Shahidul Islam');
+    expect(res1.designation).toBe('Senior Executive');
+
+    const card2 = `
+      Farhan Chowdhury
+      MD
+      Summit Power
+      01811223344
+    `;
+    const res2 = parseCardText(card2);
+    expect(res2.name).toBe('Farhan Chowdhury');
+    expect(res2.designation).toBe('MD');
+  });
+
+  it('17. Spatially reconstructs multi-column words into proper isolated lines without horizontal cross-column merging', () => {
+    // Simulated word bounding boxes from a 2-column business card (Provise layout)
+    const mockWords = [
+      // Left Column (Company)
+      { text: 'P', bbox: { x0: 90, y0: 290, x1: 130, y1: 340 }, confidence: 92 },
+      { text: 'ROVI', bbox: { x0: 138, y0: 290, x1: 290, y1: 340 }, confidence: 92 },
+      { text: 'S', bbox: { x0: 297, y0: 290, x1: 333, y1: 340 }, confidence: 90 },
+      { text: 'E', bbox: { x0: 340, y0: 290, x1: 374, y1: 340 }, confidence: 92 },
+      { text: 'LIMITED', bbox: { x0: 110, y0: 350, x1: 350, y1: 380 }, confidence: 96 },
+      // Noise artifact in logo (should be filtered out)
+      { text: 'AS', bbox: { x0: 170, y0: 110, x1: 280, y1: 170 }, confidence: 55 },
+      // Right Column (Person & Contacts)
+      { text: 'Md.', bbox: { x0: 460, y0: 100, x1: 550, y1: 145 }, confidence: 96 },
+      { text: 'Abul', bbox: { x0: 560, y0: 100, x1: 670, y1: 145 }, confidence: 96 },
+      { text: 'Kashem', bbox: { x0: 460, y0: 155, x1: 650, y1: 195 }, confidence: 91 },
+      { text: 'Akash', bbox: { x0: 660, y0: 155, x1: 800, y1: 195 }, confidence: 96 },
+      { text: 'Manager', bbox: { x0: 460, y0: 210, x1: 580, y1: 240 }, confidence: 96 },
+      { text: 'Mobile:', bbox: { x0: 510, y0: 288, x1: 590, y1: 310 }, confidence: 92 },
+      { text: '01712874232', bbox: { x0: 600, y0: 288, x1: 760, y1: 310 }, confidence: 92 },
+      { text: 'Mail:', bbox: { x0: 510, y0: 335, x1: 560, y1: 355 }, confidence: 88 },
+      { text: 'makakash.hi@gmail.com', bbox: { x0: 570, y0: 335, x1: 840, y1: 355 }, confidence: 92 }
+    ];
+
+    const lines = reconstructLayoutLines(mockWords);
+    const lineTexts = lines.map(l => l.text);
+
+    // Left column words are merged into 'PROVISE' without internal spaces due to kerning logic
+    expect(lineTexts).toContain('PROVISE');
+    expect(lineTexts).toContain('LIMITED');
+    // Logo drawing artifact is filtered out
+    expect(lineTexts).not.toContain('AS');
+    // Right column lines are separated properly
+    expect(lineTexts).toContain('Md. Abul');
+    expect(lineTexts).toContain('Kashem Akash');
+    expect(lineTexts).toContain('Manager');
+    expect(lineTexts).toContain('Mobile: 01712874232');
+    expect(lineTexts).toContain('Mail: makakash.hi@gmail.com');
+    // Ensure horizontal lines did NOT merge across columns!
+    expect(lineTexts.some(t => t.includes('PROVISE') && t.includes('Mail'))).toBe(false);
   });
 });

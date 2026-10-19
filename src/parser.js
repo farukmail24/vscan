@@ -13,7 +13,7 @@ const BENGALI_DIGITS = {
 // Company indicators in English & Bengali
 // Non-name slogans, certifications and greetings to skip during Name identification
 const SLOGAN_PATTERNS = [
-  /\b(ISO\s*\d+|Quality\s+First|Excellence|Certified|Since\s+\d+|Established|Welcome|Service|Solutions|Trust|Integrity|Leading|Innovation|Global|Official|Bismillah|Alhamdulillah)\b/i,
+  /\b(ISO\s*\d+|Quality\s+First|Excellence(?:\s+in\s+[A-Za-z]+)?|Certified|Since\s+\d+|Established|Welcome|Service|Solutions|Trust|Integrity|Leading|Innovation|Global|Official|Bismillah|Alhamdulillah|World\s*Class)\b/i,
   /(বিসমিল্লাহ|আলহামদুলিল্লাহ|স্বাগতম|আন্তরিক|বিশ্বস্ততা|গুণগত মান|প্রতিষ্ঠিত|কোয়ালিটি)/
 ];
 
@@ -23,11 +23,23 @@ const COMPANY_PATTERNS = [
   /(লিমিটেড|লিঃ|প্রাঃ\s*লিঃ|এন্টারপ্রাইজ|ট্রেডিং|ট্রেডার্স|ইন্ডাস্ট্রিজ|গ্রুপ|সলিউশন|কোম্পানী|কর্পোরেশন|ফার্মা|টেকনোলজি|কনসালটেন্সি|হসপিটাল|হাসপাতাল|ডায়াগনস্টিক|ব্যাংক|টেক্সটাইল|গার্মেন্টস|ফাউন্ডেশন|একাডেমি)/
 ];
 
-// Designation indicators in English & Bengali
+// Standalone company suffix indicators (e.g. when 'LIMITED' is on its own line below brand name)
+const COMPANY_SUFFIX_ONLY = /^(?:Ltd\.?|Limited|Pvt\.?\s*Ltd\.?|Private\s*Limited|Corporation|Corp\.?|Group|Industries|Enterprises|Holdings|Technologies|Solutions|Diagnostic|Hospital|College|University|লিমিটেড|লিঃ|ইন্ডাস্ট্রিজ|গ্রুপ)$/i;
+
+// Designation indicators in English & Bengali (Note: 'MD' acronym handled separately to avoid matching 'Md.' name prefix)
 const DESIGNATION_PATTERNS = [
-  /\b(Chief Executive Officer|CEO|Managing Director|MD|General Manager|GM|Assistant General Manager|AGM|Deputy General Manager|DGM|Executive Director|Director|Assistant Manager|Branch Manager|Manager|Senior Executive|Executive|Senior Officer|Officer|Proprietor|Chairman|Chairperson|Vice Chairman|Partner|Founder|Co-Founder|Chief Technology Officer|CTO|Chief Operating Officer|COO|Chief Financial Officer|CFO|Software Engineer|Senior Engineer|Lead Engineer|Civil Engineer|Electrical Engineer|Mechanical Engineer|Engineer|Consultant|Advisor|Principal|Doctor|Dr\.|Physician|Surgeon|Advocate|Barrister|Lecturer|Professor|Assistant Professor|Associate Professor|Head of [A-Za-z\s]+|Team Lead|Marketing Executive|Sales Executive|Accountant|Accounts Officer|Merchandiser)\b/i,
+  /\b(Chief Executive Officer|CEO|Managing Director|General Manager|GM|Assistant General Manager|AGM|Deputy General Manager|DGM|Executive Director|Director|Assistant Manager|Branch Manager|Manager|Senior Executive|Executive|Senior Officer|Officer|Proprietor|Chairman|Chairperson|Vice Chairman|Partner|Founder|Co-Founder|Chief Technology Officer|CTO|Chief Operating Officer|COO|Chief Financial Officer|CFO|Software Engineer|Senior Engineer|Lead Engineer|Civil Engineer|Electrical Engineer|Mechanical Engineer|Engineer|Consultant|Advisor|Principal|Doctor|Physician|Surgeon|Advocate|Barrister|Lecturer|Professor|Assistant Professor|Associate Professor|Head of [A-Za-z\s]+|Team Lead|Marketing Executive|Sales Executive|Accountant|Accounts Officer|Merchandiser)\b/i,
   /(ব্যবস্থাপনা পরিচালক|উপ-ব্যবস্থাপনা পরিচালক|পরিচালক|ম্যানেজার|ব্যবস্থাপক|সহকারী ম্যানেজার|নির্বাহী|কর্মকর্তা|হিসাবরক্ষণ কর্মকর্তা|চেয়ারম্যান|ভাইস চেয়ারম্যান|স্বত্বাধিকারী|প্রোপাইটার|প্রতিষ্ঠাতা|প্রকৌশলী|প্রধান নির্বাহী|পরামর্শক|আইনজীবী|অ্যাডভোকেট|ডাক্তার|অধ্যাপক|সহকারী অধ্যাপক|প্রভাষক|মার্চেন্ডাইজার)/
 ];
+
+// Name honorifics/prefixes common in Bangladesh & South Asia (requires dot or subsequent name for Md to distinguish from standalone MD acronym)
+const NAME_PREFIX_PATTERN = /^(?:Md\.|Md\s+[A-Za-z]|Mohammad\b|Mohammed\b|Muhammad\b|Mostafa\b|Mustafa\b|Mr\.\s*|Mrs\.\s*|Ms\.\s*|Dr\.\s*|Engr\.\s*|Advocate\b|Adv\.\s*|Barrister\b|Alhaj\b|Al-Haj\b|Haji\b|অধ্যাপক|ডাক্তার|প্রকৌশলী|জনাব)/i;
+
+// Popular free email domains that must NEVER be extracted as company websites
+const POPULAR_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'live.com',
+  'mail.com', 'zoho.com', 'yandex.com', 'proton.me', 'protonmail.com', 'aol.com'
+]);
 
 // Address indicators in English & Bengali
 const ADDRESS_PATTERNS = [
@@ -144,7 +156,7 @@ export function extractEmails(text) {
 }
 
 /**
- * Extract websites from card text
+ * Extract websites from card text, avoiding free email domains like gmail.com
  */
 export function extractWebsites(text) {
   const websites = [];
@@ -152,9 +164,16 @@ export function extractWebsites(text) {
   let match;
   while ((match = webRegex.exec(text)) !== null) {
     const candidate = match[0].trim();
-    // Exclude if it is an email
+    // Exclude if it is immediately preceded by @ (part of an email address)
+    if (match.index > 0 && text[match.index - 1] === '@') continue;
     if (candidate.includes('@')) continue;
+
     let formatted = candidate.toLowerCase();
+    const cleanDomain = formatted.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+
+    // Exclude free public email providers (gmail.com, yahoo.com, etc.)
+    if (POPULAR_EMAIL_DOMAINS.has(cleanDomain)) continue;
+
     if (!formatted.startsWith('http://') && !formatted.startsWith('https://')) {
       formatted = 'https://' + formatted;
     }
@@ -183,19 +202,21 @@ export function parseCardText(rawText) {
     };
   }
 
+  // Pre-clean lines: strip leading icon bullets, quotes, and punctuation artifacts
   const lines = rawText
     .split('\n')
-    .map(l => l.trim())
+    .map(l => l.replace(/^[©®•*~০>\-–|]+\s*/, '').trim())
     .filter(l => l.length > 0);
 
   const emails = extractEmails(rawText);
-  const websites = extractWebsites(rawText);
+  const websites = extractWebsites(rawText, emails);
   const phones = extractPhones(rawText);
 
   let name = null;
   let designation = null;
   let company = null;
   let addressLines = [];
+  const notesLines = [];
   const uncertain_fields = [];
 
   // Helper to test regex patterns
@@ -204,11 +225,15 @@ export function parseCardText(rawText) {
   // Classified line indices
   const lineTypes = new Array(lines.length).fill(null);
 
-  // Pass 1: Identify Designation, Company, Address, Contact lines
+  // Pass 1: Identify Contact lines (phone, email, website)
   lines.forEach((line, idx) => {
-    // Check if line contains email or website or majority digits (phone)
     if (emails.some(e => line.toLowerCase().includes(e)) ||
         websites.some(w => line.toLowerCase().includes(w.replace(/^https?:\/\//, '')))) {
+      lineTypes[idx] = 'contact';
+      return;
+    }
+
+    if (/^(?:mobile|phone|tel|mail|email|contact|web|website|মোবাইল|ফোন|ইমেইল):/i.test(line)) {
       lineTypes[idx] = 'contact';
       return;
     }
@@ -218,54 +243,99 @@ export function parseCardText(rawText) {
       lineTypes[idx] = 'phone';
       return;
     }
+  });
 
-    // Designation check
-    if (!designation && matchesPatterns(line, DESIGNATION_PATTERNS)) {
+  // Pass 2: Identify Non-name Slogans & Certifications
+  lines.forEach((line, idx) => {
+    if (lineTypes[idx] !== null) return;
+    if (matchesPatterns(line, SLOGAN_PATTERNS) && !NAME_PREFIX_PATTERN.test(line)) {
+      if (!matchesPatterns(line, COMPANY_PATTERNS) || /^(?:Excellence|Quality|Leading|World\s*Class)/i.test(line)) {
+        lineTypes[idx] = 'slogan';
+        notesLines.push(line);
+      }
+    }
+  });
+
+  // Pass 3: Identify Designation (handling acronyms like MD/CEO carefully)
+  lines.forEach((line, idx) => {
+    if (lineTypes[idx] !== null) return;
+    if (NAME_PREFIX_PATTERN.test(line)) return; // Name prefix like 'Md.' is never a designation!
+
+    const isExplicitDesignation = matchesPatterns(line, DESIGNATION_PATTERNS);
+    const isAcronymDesignation = /^(?:MD|M\.D\.|M\/D|CEO|GM|AGM|DGM|CTO|COO|CFO)$/.test(line.trim());
+
+    if (!designation && (isExplicitDesignation || isAcronymDesignation)) {
       designation = line;
       lineTypes[idx] = 'designation';
       return;
     }
+  });
 
-    // Address check
-    if (matchesPatterns(line, ADDRESS_PATTERNS)) {
-      addressLines.push(line);
-      lineTypes[idx] = 'address';
-      return;
+  // Pass 4: Identify Company (supporting multi-line combinations like 'PROVISE' + 'LIMITED')
+  lines.forEach((line, idx) => {
+    if (lineTypes[idx] !== null) return;
+    if (matchesPatterns(line, COMPANY_PATTERNS)) {
+      let comp = line;
+      // If line is just a suffix (e.g. 'LIMITED' or 'GROUP') and preceding line is an unclassified title
+      if (COMPANY_SUFFIX_ONLY.test(line.trim()) && idx > 0 && lineTypes[idx - 1] === null) {
+        comp = lines[idx - 1] + ' ' + line;
+        lineTypes[idx - 1] = 'company';
+      }
+      if (!company) {
+        company = comp;
+        lineTypes[idx] = 'company';
+        return;
+      }
     }
+  });
 
-    // Company check
-    if (!company && matchesPatterns(line, COMPANY_PATTERNS)) {
-      company = line;
-      lineTypes[idx] = 'company';
+  // Pass 5: Identify Address lines & strip label prefixes
+  lines.forEach((line, idx) => {
+    if (lineTypes[idx] !== null) return;
+    const hasAddressPattern = matchesPatterns(line, ADDRESS_PATTERNS);
+    const hasAddressPrefix = /^(?:Address|Addr|Office|Corporate Office|Factory|Head Office|ঠিকানা|Location)[\s.:–-]+/i.test(line);
+
+    if (hasAddressPattern || hasAddressPrefix) {
+      const cleanAddressLine = line.replace(/^(?:Address|Addr|Office|Corporate Office|Factory|Head Office|ঠিকানা|Location)[\s.:–-]+/i, '').trim();
+      addressLines.push(cleanAddressLine || line);
+      lineTypes[idx] = 'address';
       return;
     }
   });
 
-  // Pass 2: Identify Name
-  // Top-most 1-5 word line without digits that isn't classified and isn't a slogan
+  // Pass 6: Identify Name (supporting multi-line names like 'Md. Abul' + 'Kashem Akash')
   for (let idx = 0; idx < lines.length; idx++) {
     if (lineTypes[idx] !== null) continue;
 
     const line = lines[idx];
-    if (matchesPatterns(line, SLOGAN_PATTERNS)) {
-      lineTypes[idx] = 'slogan';
-      continue;
-    }
-
     const words = line.split(/\s+/).filter(Boolean);
     const hasDigits = /\d/.test(line);
 
-    // Business card names are usually 1 to 5 words, without URL/email punctuation
     if (!hasDigits && words.length >= 1 && words.length <= 5 && !/[@/:=]/.test(line)) {
-      // Strip trailing academic degrees or professional certifications for a clean name
-      const cleanedName = line.replace(/,\s*(?:MBBS|FCPS|MD|PhD|PMP|MBA|B\.?Sc|M\.?Sc|CPA|FCA)\b/gi, '').trim();
-      name = cleanedName || line;
+      let fullName = line.replace(/,\s*(?:MBBS|FCPS|MD|PhD|PMP|MBA|B\.?Sc|M\.?Sc|CPA|FCA)\b/gi, '').trim();
       lineTypes[idx] = 'name';
+
+      // Check if subsequent line completes the name (e.g. 'Md. Abul' followed by 'Kashem Akash')
+      if (idx + 1 < lines.length && lineTypes[idx + 1] === null) {
+        const nextLine = lines[idx + 1];
+        const nextWords = nextLine.split(/\s+/).filter(Boolean);
+        const nextHasDigits = /\d/.test(nextLine);
+
+        if (!nextHasDigits && nextWords.length >= 1 && nextWords.length <= 3 && !/[@/:=]/.test(nextLine)) {
+          const afterNextIsDesignationOrContact = (idx + 2 < lines.length) && (lineTypes[idx + 2] === 'designation' || lineTypes[idx + 2] === 'contact');
+          if (NAME_PREFIX_PATTERN.test(line) || afterNextIsDesignationOrContact) {
+            fullName += ' ' + nextLine;
+            lineTypes[idx + 1] = 'name';
+          }
+        }
+      }
+
+      name = fullName || line;
       break;
     }
   }
 
-  // Pass 3: If company still missing, look for prominent unclassified lines
+  // Pass 7: If company still missing, look for prominent unclassified line
   if (!company) {
     for (let idx = 0; idx < lines.length; idx++) {
       if (lineTypes[idx] === null && lines[idx] !== name) {
@@ -276,15 +346,27 @@ export function parseCardText(rawText) {
     }
   }
 
-  // Build full address string
-  const address = addressLines.length > 0 ? addressLines.join(', ') : null;
+  // Build clean address string (normalize double commas and whitespace)
+  let address = addressLines.length > 0 ? addressLines.join(', ') : null;
+  if (address) {
+    address = address
+      .replace(/,\s*,+/g, ',')
+      .replace(/\s*,\s*/g, ', ')
+      .replace(/,\s*$/, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
 
   // Unclassified remaining lines form Notes
-  const remainingNotes = lines
-    .filter((_, idx) => lineTypes[idx] === null)
-    .join('; ');
+  lines.forEach((line, idx) => {
+    if (lineTypes[idx] === null && !notesLines.includes(line)) {
+      notesLines.push(line);
+    }
+  });
 
-  // Per specification: all heuristically derived fields in offline mode go into uncertain_fields
+  const notes = notesLines.length > 0 ? notesLines.join('; ') : null;
+
+  // Mark heuristically derived fields in uncertain_fields
   if (name) uncertain_fields.push('name');
   if (designation) uncertain_fields.push('designation');
   if (company) uncertain_fields.push('company');
@@ -299,7 +381,7 @@ export function parseCardText(rawText) {
     emails,
     websites,
     address,
-    notes: remainingNotes || null,
+    notes,
     uncertain_fields
   };
 }
