@@ -5,7 +5,7 @@
  */
 
 import { getSettings, saveSettings } from '../settings.js';
-import { pingBackend, getKnowledgeRules, testGeminiKeys, updateGeminiKeys } from '../api.js';
+import { pingBackend, getKnowledgeRules, testGeminiKeys, updateGeminiKeys, getActiveEndpoint, getGeminiKeysFromBackend } from '../api.js';
 import { getKnowledgeSummary, resetLearnedKnowledge, syncKnowledgeFromBackend } from '../knowledge.js';
 import { getPendingCards, markCardSynced } from '../db.js';
 import { openModal } from './modal.js';
@@ -374,6 +374,7 @@ export function renderSettings(container) {
     testBtn.setAttribute('disabled', 'true');
     testBtn.textContent = 'Testing...';
     testBox.style.display = 'block';
+    testBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     testBox.style.borderColor = 'var(--accent-blue)';
     testBox.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px; color: var(--accent-blue); font-size: 0.85rem;">
@@ -384,6 +385,7 @@ export function renderSettings(container) {
 
     try {
       const res = await pingBackend();
+      const activeEndpoint = getActiveEndpoint() || apiUrl || '/api';
       testBox.style.borderColor = 'var(--accent-emerald)';
       testBox.innerHTML = `
         <div style="color: var(--accent-emerald); font-weight: 700; font-size: 0.9rem; margin-bottom: 6px;">
@@ -393,7 +395,8 @@ export function renderSettings(container) {
           • Latency: <strong style="color: var(--accent-emerald);">${res.latencyMs || '<1'}ms</strong><br/>
           • Database: <strong>${escapeHtml(res.database || 'test')}</strong><br/>
           • Server Version: <strong>${escapeHtml(res.version || '8.0.11-TiDB')}</strong><br/>
-          • Host: <code>${escapeHtml(res.host || currentSettings.dbHost)}:${res.port || 4000}</code>
+          • Host: <code>${escapeHtml(res.host || currentSettings.dbHost)}:${res.port || 4000}</code><br/>
+          • Active Endpoint: <code style="color: var(--accent-blue);">${escapeHtml(activeEndpoint)}</code>
         </div>
       `;
       showToast('TiDB Cloud database connection verified!', 'success');
@@ -403,11 +406,12 @@ export function renderSettings(container) {
         <div style="color: var(--accent-rose); font-weight: 700; font-size: 0.9rem; margin-bottom: 4px;">
           ✗ Database Connection Failed
         </div>
-        <div style="font-size: 0.78rem; color: var(--text-primary); margin-bottom: 6px;">
+        <div style="font-size: 0.78rem; color: var(--text-primary); margin-bottom: 6px; word-break: break-all;">
           ${escapeHtml(err.message)}
         </div>
-        <div style="font-size: 0.72rem; color: var(--text-muted);">
-          Verify that your internet connection is active, TiDB endpoint is accessible, and the local backend server is running.
+        <div style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.5;">
+          • আপনি যদি Apache / XAMPP ব্যবহার করেন, তবে নিশ্চিত করুন Apache চালু আছে।<br/>
+          • অথবা টার্মিনালে <code>npm run dev</code> বা <code>npm run server</code> চালু রাখুন।
         </div>
       `;
       showToast('Connection test failed', 'error');
@@ -416,6 +420,27 @@ export function renderSettings(container) {
       testBtn.textContent = 'Test TiDB Connection';
     }
   };
+
+  // Auto-fetch stored Gemini keys from TiDB if inputs are empty
+  const primaryInput = container.querySelector('#setting-gemini-primary');
+  const backupInput = container.querySelector('#setting-gemini-backup');
+  if (primaryInput && !primaryInput.value) {
+    getGeminiKeysFromBackend().then(res => {
+      if (res && res.keys && res.keys.length > 0) {
+        if (!primaryInput.value && res.keys[0]) {
+          primaryInput.value = res.keys[0];
+        }
+        if (backupInput && !backupInput.value && res.keys[1]) {
+          backupInput.value = res.keys[1];
+        }
+        saveSettings({
+          geminiPrimaryApiKey: res.keys[0] || '',
+          geminiBackupApiKey: res.keys[1] || '',
+          geminiApiKeys: res.keys
+        });
+      }
+    }).catch(() => {});
+  }
 
   // Manual Sync Pending Cards
   const syncBtn = container.querySelector('#manual-sync-btn');

@@ -489,6 +489,10 @@ try {
             jsonResponse(['ok' => true, 'rules' => $rules, 'count' => count($rules)]);
             break;
 
+        case 'getGeminiKeys':
+            jsonResponse(['ok' => true, 'keys' => resolveGeminiKeysPhp($payload)]);
+            break;
+
         case 'testGeminiKeys':
             $keys = resolveGeminiKeysPhp($payload);
             $results = [];

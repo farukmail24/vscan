@@ -1,64 +1,99 @@
 /**
  * Backend API Client for TiDB Cloud Database
  * Communicates with the TiDB Cloud API endpoints (/api or api/index.php)
+ * Featuring resilient auto-detecting endpoint discovery for Vite and XAMPP/Apache.
  */
 
 import { getSettings } from './settings.js';
 
 const REQUEST_TIMEOUT_MS = 30000;
+let cachedWorkingEndpoint = null;
 
-/**
- * Resolves the API endpoint URL intelligently:
- * Works in Vite dev (port 3000), Apache/XAMPP subpath (/vscan/api), or remote hosting.
- */
-function getEndpointUrl() {
-  const settings = getSettings();
-  const configured = (settings.apiUrl || '/api').trim();
-
-  // If already absolute URL (e.g. http://...)
-  if (/^https?:\/\//i.test(configured)) {
-    return configured;
-  }
-
-  // If running in a subdirectory (e.g. /vscan/ or /vscan/dist/)
-  const pathname = window.location.pathname;
-  const basePathMatch = pathname.match(/^(\/[^\/]+)/);
-  const basePath = basePathMatch ? basePathMatch[1] : '';
-
-  if (basePath && basePath !== '/' && !configured.startsWith(basePath)) {
-    return `${basePath.replace(/\/+$/, '')}/${configured.replace(/^\/+/, '')}`;
-  }
-
-  return configured;
+export function getActiveEndpoint() {
+  return cachedWorkingEndpoint;
 }
 
 /**
- * Universal caller to the TiDB backend API
+ * Builds candidate endpoint list based on current browser environment (Vite, XAMPP, relative)
+ */
+export function getCandidateEndpoints() {
+  const settings = getSettings();
+  const configured = (settings.apiUrl || '').trim();
+  const candidates = [];
+
+  // 1. Previously verified working endpoint
+  if (cachedWorkingEndpoint) {
+    candidates.push(cachedWorkingEndpoint);
+  }
+
+  // 2. User configured endpoint (if any)
+  if (configured) {
+    candidates.push(configured);
+  }
+
+  const port = window.location.port;
+  const isVite = port === '3000';
+  const pathname = window.location.pathname || '';
+  const cleanBase = pathname.replace(/\/([^\/]+\.[^\/]+|\/?)$/, '');
+
+  if (isVite) {
+    candidates.push('/api');
+  }
+
+  // 3. Direct PHP endpoints in XAMPP
+  candidates.push('api/index.php');
+  candidates.push('../api/index.php');
+
+  if (cleanBase) {
+    candidates.push(`${cleanBase}/api/index.php`);
+    candidates.push(`${cleanBase}/api/`);
+    candidates.push(`${cleanBase}/api`);
+  }
+
+  // 4. Default standard locations
+  candidates.push('/vscan/api/index.php');
+  candidates.push('/vscan/api/');
+  candidates.push('/api');
+  candidates.push('http://localhost:3000/api');
+  candidates.push('http://localhost/vscan/api/index.php');
+
+  // Deduplicate candidates
+  const seen = new Set();
+  return candidates.filter(url => {
+    if (!url || seen.has(url)) return false;
+    seen.add(url);
+    return true;
+  });
+}
+
+/**
+ * Universal caller to the TiDB backend API with multi-endpoint fallback
  * @param {string} action - 'ping' | 'extract' | 'checkDuplicate' | 'save' | 'update' | 'listCards' | 'deleteCard' | 'getKnowledge'
  * @param {object} payload - action parameters
  * @returns {Promise<any>}
  */
 export async function callBackend(action, payload = {}) {
   const settings = getSettings();
-  let url = getEndpointUrl();
+  const candidates = getCandidateEndpoints();
 
   if (!navigator.onLine) {
     throw new Error('Device is currently offline. Please check your internet connection or use Offline Mode.');
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const bodyData = {
+    action,
+    geminiApiKey: settings.geminiApiKey || undefined,
+    ...payload
+  };
 
-  try {
-    const bodyData = {
-      action,
-      geminiApiKey: settings.geminiApiKey || undefined,
-      ...payload
-    };
+  const errors = [];
 
-    let response;
+  for (const url of candidates) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
-      response = await fetch(url, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -66,70 +101,37 @@ export async function callBackend(action, payload = {}) {
         body: JSON.stringify(bodyData),
         signal: controller.signal
       });
-    } catch (networkErr) {
-      // In XAMPP, if /api fails, attempt automatic fallback to api/index.php
-      if (!url.endsWith('.php')) {
-        const phpUrl = url.endsWith('/') ? `${url}index.php` : `${url}/index.php`;
+
+      clearTimeout(timer);
+
+      if (response.ok) {
+        const text = await response.text();
+        let result;
         try {
-          response = await fetch(phpUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(bodyData),
-            signal: controller.signal
-          });
-          url = phpUrl;
+          result = JSON.parse(text);
         } catch (_) {
-          throw networkErr;
+          errors.push(`${url}: Invalid JSON (${text.slice(0, 60)})`);
+          continue;
+        }
+
+        if (result && result.ok) {
+          cachedWorkingEndpoint = url; // Remember working endpoint
+          return result;
+        } else if (result && result.error) {
+          throw new Error(result.error);
         }
       } else {
-        throw networkErr;
+        errors.push(`${url}: HTTP ${response.status}`);
+      }
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.name !== 'AbortError') {
+        errors.push(`${url}: ${err.message}`);
       }
     }
-
-    clearTimeout(timer);
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`API endpoint not found (404) at ${url}. Verify backend server is running.`);
-      }
-      if (response.status === 429) {
-        throw new Error('Rate limit or quota exceeded (429). Please try again in a moment.');
-      }
-      const errText = await response.text();
-      try {
-        const errObj = JSON.parse(errText);
-        throw new Error(errObj.error || `Server returned HTTP ${response.status}`);
-      } catch (_) {
-        throw new Error(`Server returned HTTP ${response.status}: ${errText.slice(0, 150)}`);
-      }
-    }
-
-    const text = await response.text();
-    let result;
-    try {
-      result = JSON.parse(text);
-    } catch (parseError) {
-      throw new Error(`Invalid JSON from TiDB API: ${text.slice(0, 150)}`);
-    }
-
-    if (!result.ok) {
-      throw new Error(result.error || 'Unknown backend error occurred');
-    }
-
-    return result;
-  } catch (err) {
-    clearTimeout(timer);
-
-    if (err.name === 'AbortError') {
-      throw new Error('Request timed out (30s). The TiDB Database or AI API took too long to respond.');
-    }
-
-    if (err.message && err.message.includes('Failed to fetch')) {
-      throw new Error('Network error (Failed to fetch). Verify TiDB backend server is running.');
-    }
-
-    throw err;
   }
+
+  throw new Error(`Connection to TiDB backend failed across all endpoints:\n` + errors.slice(0, 3).join('\n'));
 }
 
 /**
@@ -159,6 +161,13 @@ export async function extractWithAI(imageBase64, backImageBase64 = null) {
     backImageBase64: backImageBase64 || null,
     backMimeType: backImageBase64 ? 'image/jpeg' : null
   });
+}
+
+/**
+ * Fetch stored Gemini API keys from TiDB database
+ */
+export async function getGeminiKeysFromBackend() {
+  return callBackend('getGeminiKeys');
 }
 
 /**

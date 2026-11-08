@@ -619,6 +619,9 @@ export async function handleApiRequest(action, payload = {}) {
     case 'extract':
       return handleExtract(payload);
 
+    case 'getGeminiKeys':
+      return { ok: true, keys: await resolveGeminiKeys(payload) };
+
     case 'testGeminiKeys':
       return handleTestGeminiKeys(payload);
 
