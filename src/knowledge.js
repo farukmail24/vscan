@@ -1,7 +1,7 @@
 /**
  * Knowledge Pack & Self-Learning Engine
  * Manages modular JSON vocabularies (designations, company suffixes, addresses, OCR confusions),
- * merges them with IndexedDB overrides and Google Sheet Rules,
+ * merges them with IndexedDB overrides and TiDB knowledge_rules,
  * and provides high-precision Fuse.js fuzzy matching and learning loops.
  */
 

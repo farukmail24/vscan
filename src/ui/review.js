@@ -439,13 +439,12 @@ export function renderReview(container) {
     }
 
     try {
-      if (navigator.onLine && settings.appsScriptUrl) {
-        // Online Save: Post to Google Apps Script
-        const uploadImages = !!settings.uploadImagesToDrive;
+      if (navigator.onLine) {
+        // Online Save: Post to TiDB Database
         const backendResult = await saveRecord(
           compiledRecord,
-          uploadImages ? frontBase64 : null,
-          uploadImages ? backBase64 : null
+          frontBase64 || null,
+          backBase64 || null
         );
         
         // Save local copy with status synced
@@ -456,13 +455,13 @@ export function renderReview(container) {
           backBase64,
           source,
           status: 'synced',
-          row: backendResult.row,
+          row: backendResult.id || id,
           frontImageUrl: backendResult.frontImageUrl,
           backImageUrl: backendResult.backImageUrl,
           createdAt: compiledRecord.timestamp
         });
 
-        showToast('Saved successfully to Google Sheet!', 'success', 3000);
+        showToast('Saved successfully to TiDB Database!', 'success', 3000);
       } else {
         // Offline Save: Store pending in IndexedDB
         await saveCardLocal({

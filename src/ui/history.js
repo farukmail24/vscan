@@ -5,7 +5,7 @@
  */
 
 import { getAllCardsLocal, getPendingCards, markCardSynced, deleteCardLocal, saveCardLocal } from '../db.js';
-import { saveRecord, extractWithAI, updateRecord } from '../api.js';
+import { saveRecord, extractWithAI, updateRecord, listCardsFromDB, deleteCardFromDB } from '../api.js';
 import { setPendingCount } from '../store.js';
 import { getSettings } from '../settings.js';
 import { openModal, openImageZoomModal } from './modal.js';
@@ -78,6 +78,10 @@ export async function renderHistory(container) {
           </div>
 
           <div style="display: flex; gap: 6px; flex-shrink: 0;">
+            <button type="button" id="fetch-tidb-btn" class="btn-icon" title="Pull latest cards from TiDB Cloud database">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+              <span style="font-size: 0.72rem; font-weight: 600; margin-left: 4px;">TiDB</span>
+            </button>
             <button type="button" id="export-csv-btn" class="btn-icon" title="Export as CSV (Excel compatible with UTF-8 BOM)">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               <span style="font-size: 0.72rem; font-weight: 600; margin-left: 4px;">CSV</span>
@@ -187,18 +191,16 @@ export async function renderHistory(container) {
         syncBtn.setAttribute('disabled', 'true');
         syncBtn.textContent = 'Syncing...';
         let syncedCount = 0;
-        const settings = getSettings();
-        const uploadImages = !!settings.uploadImagesToDrive;
 
         for (const card of pendingCards) {
           try {
             const res = await saveRecord(
               card.record,
-              uploadImages ? card.frontBase64 : null,
-              uploadImages ? card.backBase64 : null
+              card.frontBase64 || null,
+              card.backBase64 || null
             );
             await markCardSynced(card.id, {
-              row: res.row,
+              row: res.id,
               frontImageUrl: res.frontImageUrl,
               backImageUrl: res.backImageUrl
             });
@@ -208,8 +210,38 @@ export async function renderHistory(container) {
           }
         }
 
-        showToast(`Sync complete! ${syncedCount} card(s) synced to Sheet.`, 'success', 3000);
+        showToast(`Sync complete! ${syncedCount} card(s) synced to TiDB Database.`, 'success', 3000);
         renderHistory(container);
+      };
+    }
+
+    // Fetch from TiDB Cloud handler
+    const fetchTiDbBtn = container.querySelector('#fetch-tidb-btn');
+    if (fetchTiDbBtn) {
+      fetchTiDbBtn.onclick = async () => {
+        if (!navigator.onLine) {
+          showToast('Device is offline. Connect to internet first.', 'error');
+          return;
+        }
+
+        fetchTiDbBtn.setAttribute('disabled', 'true');
+        showToast('Fetching cards from TiDB Cloud...', 'info', 2000);
+
+        try {
+          const res = await listCardsFromDB();
+          const dbCards = res.cards || [];
+          let imported = 0;
+          for (const c of dbCards) {
+            await saveCardLocal(c);
+            imported++;
+          }
+          showToast(`Synced ${imported} card(s) from TiDB Cloud!`, 'success', 3000);
+          renderHistory(container);
+        } catch (err) {
+          showToast(`TiDB fetch failed: ${err.message}`, 'error');
+        } finally {
+          fetchTiDbBtn.removeAttribute('disabled');
+        }
       };
     }
 
@@ -337,8 +369,11 @@ export async function renderHistory(container) {
         const delBtn = modalContainer.querySelector('#delete-card-btn');
         if (delBtn) {
           delBtn.onclick = async () => {
-            if (confirm('Delete this card from local storage?')) {
+            if (confirm('Delete this card? (It will be removed locally and from TiDB)')) {
               await deleteCardLocal(card.id);
+              if (navigator.onLine) {
+                deleteCardFromDB(card.id).catch(console.warn);
+              }
               showToast('Card deleted', 'info');
               close();
               renderHistory(container);

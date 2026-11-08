@@ -335,12 +335,15 @@ export function renderScan(container) {
       const shouldUseAI = currentMode === 'ai' || (currentMode === 'auto' && isOnline);
 
       if (shouldUseAI) {
-        updateProgress(20, 'Reading card with Gemini AI...', 'Connecting to Apps Script backend');
+        updateProgress(20, 'Reading card with Gemini AI...', 'Connecting to TiDB backend');
         try {
           const aiResponse = await extractWithAI(frontBase64, backBase64);
           updateProgress(90, 'Gemini analysis complete', 'Normalizing contact records');
           extractedData = aiResponse.data;
           source = 'AI';
+          if (aiResponse.keySwitched) {
+            showToast('⚡ প্রথম API Key লিমিট বা ত্রুটির কারণে স্বয়ংক্রিয়ভাবে দ্বিতীয় কি দিয়ে স্ক্যান সম্পন্ন হয়েছে!', 'info', 4500);
+          }
         } catch (aiErr) {
           console.warn('AI Extraction error:', aiErr);
           if (currentMode === 'auto') {

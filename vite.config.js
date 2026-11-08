@@ -1,12 +1,83 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+function tidbApiPlugin() {
+  return {
+    name: 'tidb-api-middleware',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url || !req.url.startsWith('/api')) {
+          return next();
+        }
+
+        const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+          });
+          return res.end();
+        }
+
+        if (req.method === 'GET') {
+          try {
+            const { handleApiRequest } = await import('./server/apiHandler.js');
+            const result = await handleApiRequest('ping');
+            res.writeHead(200, {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(500, {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Access-Control-Allow-Origin': '*'
+            });
+            return res.end(JSON.stringify({ ok: false, error: err.message }));
+          }
+        }
+
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', async () => {
+            try {
+              const { handleApiRequest } = await import('./server/apiHandler.js');
+              const parsed = body ? JSON.parse(body) : {};
+              const actionFromUrl = url.pathname.replace(/^\/api\/?/, '');
+              const action = parsed.action || actionFromUrl || 'ping';
+              const result = await handleApiRequest(action, parsed);
+              res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end(JSON.stringify(result));
+            } catch (err) {
+              res.writeHead(400, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end(JSON.stringify({ ok: false, error: err.message }));
+            }
+          });
+          return;
+        }
+
+        next();
+      });
+    }
+  };
+}
+
 export default defineConfig({
   server: {
     port: 3000,
     host: true
   },
   plugins: [
+    tidbApiPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/*.png', 'tesseract/**/*'],

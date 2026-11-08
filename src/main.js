@@ -99,26 +99,23 @@ async function refreshPendingBadge() {
  */
 async function autoSyncPendingCards() {
   if (!navigator.onLine) return;
-  const settings = getSettings();
-  if (!settings.appsScriptUrl) return;
 
   try {
     const pending = await getPendingCards();
     if (pending.length === 0) return;
 
-    showToast(`Online: Syncing ${pending.length} offline card(s) to Sheet...`, 'info', 2500);
+    showToast(`Online: Syncing ${pending.length} offline card(s) to TiDB...`, 'info', 2500);
 
     let synced = 0;
-    const uploadImages = !!settings.uploadImagesToDrive;
     for (const card of pending) {
       try {
         const res = await saveRecord(
           card.record,
-          uploadImages ? card.frontBase64 : null,
-          uploadImages ? card.backBase64 : null
+          card.frontBase64 || null,
+          card.backBase64 || null
         );
         await markCardSynced(card.id, {
-          row: res.row,
+          row: res.id || card.id,
           frontImageUrl: res.frontImageUrl,
           backImageUrl: res.backImageUrl
         });
@@ -245,8 +242,8 @@ function init() {
   // Initialize Knowledge Pack & Self-Learning Engine
   initKnowledge().catch(console.warn);
 
-  // Background sync knowledge rules from Sheet tab "Rules" if online
-  if (navigator.onLine && getSettings().appsScriptUrl) {
+  // Background sync knowledge rules from TiDB table "knowledge_rules" if online
+  if (navigator.onLine) {
     getKnowledgeRules()
       .then(res => {
         if (res && res.rules && res.rules.length > 0) {

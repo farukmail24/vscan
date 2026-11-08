@@ -6,13 +6,19 @@
 const STORAGE_KEY = 'card_scanner_settings';
 
 const DEFAULT_SETTINGS = {
-  appsScriptUrl: '',
-  appToken: '',
+  apiUrl: '/api',
+  dbHost: 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
+  dbPort: '4000',
+  dbName: 'test',
+  dbUser: '5PNhhcR1jqyzySz.root',
+  geminiPrimaryApiKey: '',
+  geminiBackupApiKey: '',
+  geminiApiKeys: [],
   scannedBy: '',
   mode: 'auto', // 'auto' | 'ai' | 'offline'
   ocrLang: 'auto', // 'auto' | 'eng' | 'ben' | 'eng+ben'
   batchMode: false,
-  uploadImagesToDrive: false, // Default: false (do not upload images to Google Drive)
+  saveImagesToDb: true,
   theme: 'system' // 'system' | 'dark' | 'light'
 };
 

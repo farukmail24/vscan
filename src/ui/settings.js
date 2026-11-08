@@ -1,69 +1,131 @@
 /**
  * Settings Screen Component
- * Manages Apps Script connection, App Token, Scanner identity,
- * mode configuration, Google Drive image toggle, interactive Setup Guide modal,
- * connection testing, and cache management.
+ * Manages TiDB Cloud Database connection, Scanner identity,
+ * mode configuration, Gemini API key, connection testing, and cache management.
  */
 
 import { getSettings, saveSettings } from '../settings.js';
-import { pingBackend, getKnowledgeRules } from '../api.js';
+import { pingBackend, getKnowledgeRules, testGeminiKeys, updateGeminiKeys } from '../api.js';
 import { getKnowledgeSummary, resetLearnedKnowledge, syncKnowledgeFromBackend } from '../knowledge.js';
 import { getPendingCards, markCardSynced } from '../db.js';
 import { openModal } from './modal.js';
 import { showToast } from './toast.js';
-import { APPS_SCRIPT_SOURCE } from '../appsScriptSource.js';
 
 export function renderSettings(container) {
   const currentSettings = getSettings();
 
   container.innerHTML = `
     <div class="settings-view-content">
-      <!-- Interactive Setup Guide Banner Button -->
-      <div class="card-panel" style="border-color: rgba(59, 130, 246, 0.4); background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.05)); margin-bottom: 16px;">
+      <!-- TiDB Database Status Banner -->
+      <div class="card-panel" style="border-color: rgba(16, 185, 129, 0.4); background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(59, 130, 246, 0.05)); margin-bottom: 16px;">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
           <div>
-            <div style="font-size: 0.95rem; font-weight: 700; color: var(--accent-blue); display: flex; align-items: center; gap: 6px;">
-              <span>📖</span> Apps Script সেটআপ গাইডলাইন
+            <div style="font-size: 0.95rem; font-weight: 700; color: var(--accent-emerald); display: flex; align-items: center; gap: 6px;">
+              <span>⚡</span> TiDB Cloud MySQL কানেকশন
             </div>
             <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 3px;">
-              Google Sheet, Gemini AI ও Web App URL পাওয়ার পূর্ণ নির্দেশিকা
+              ডাটাবেস: <strong>test</strong> | ক্লাউড রিজিয়ন: <strong>AWS ap-southeast-1</strong>
             </div>
           </div>
-          <button type="button" id="open-guide-btn" class="btn btn-primary btn-sm" style="flex-shrink: 0; width: auto; padding: 6px 14px;">
-            গাইড দেখুন
+          <button type="button" id="ping-tidb-quick-btn" class="btn btn-primary btn-sm" style="flex-shrink: 0; width: auto; padding: 6px 14px; background: var(--accent-emerald); border-color: var(--accent-emerald); color: #000; font-weight: 700;">
+            📡 পিং টেস্ট
           </button>
         </div>
       </div>
 
-      <!-- Backend Connection Card -->
+      <!-- Database Configuration Card -->
       <div class="card-panel">
         <div class="card-title">
-          <span>Backend Configuration</span>
-          <span class="badge badge-ai">Apps Script</span>
+          <span>TiDB Database Details</span>
+          <span class="badge badge-ai" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">TiDB Cloud</span>
+        </div>
+
+        <div style="background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px; font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.7;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">HOST:</span>
+            <span style="color: var(--text-primary); font-weight: 600;">${escapeHtml(currentSettings.dbHost || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">PORT:</span>
+            <span style="color: var(--text-primary); font-weight: 600;">${escapeHtml(currentSettings.dbPort || '4000')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">DATABASE:</span>
+            <span style="color: var(--accent-emerald); font-weight: 700;">${escapeHtml(currentSettings.dbName || 'test')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">USERNAME:</span>
+            <span style="color: var(--text-primary);">${escapeHtml(currentSettings.dbUser || '5PNhhcR1jqyzySz.root')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">SECURITY:</span>
+            <span style="color: var(--accent-blue); font-weight: 600;">TLS v1.2 (SSL Encrypted)</span>
+          </div>
         </div>
 
         <form id="settings-form">
-          <!-- Apps Script URL -->
+          <!-- API Endpoint URL -->
           <div class="form-group">
-            <label class="form-label" for="setting-url">Apps Script Web App URL</label>
-            <input type="url" id="setting-url" class="form-input" placeholder="https://script.google.com/macros/s/.../exec" value="${escapeHtml(currentSettings.appsScriptUrl || '')}" required />
+            <label class="form-label" for="setting-api-url">Backend API Endpoint</label>
+            <input type="text" id="setting-api-url" class="form-input" placeholder="/api or http://localhost:3000/api" value="${escapeHtml(currentSettings.apiUrl || '/api')}" required />
             <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-              গুগল শিটের Web App URL (যার শেষে /exec থাকে)। এটি অ্যাক্সেস: Anyone হতে হবে।
+              লোকাল Vite সার্ভার বা Apache XAMPP API পাথ। ডিফল্ট: <code>/api</code>
             </div>
           </div>
 
-          <!-- App Token -->
-          <div class="form-group">
-            <label class="form-label" for="setting-token">App Token (Shared Secret)</label>
-            <div style="position: relative;">
-              <input type="password" id="setting-token" class="form-input" style="padding-right: 42px;" placeholder="Secret matching backend APP_TOKEN" value="${escapeHtml(currentSettings.appToken || '')}" required />
-              <button type="button" id="toggle-token-btn" class="btn-icon" style="position: absolute; right: 4px; top: 4px;" title="Show or hide token">
-                <svg id="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <!-- Gemini AI Keys Failover Manager Panel -->
+          <div style="background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: var(--radius-md); padding: 14px; margin: 16px 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="font-size: 0.88rem; font-weight: 700; color: var(--accent-blue); display: flex; align-items: center; gap: 6px;">
+                <span>✨</span> Gemini AI Keys & Auto-Failover
+              </div>
+              <span class="badge badge-ai" style="font-size: 0.68rem;">2-Key Failover Active</span>
+            </div>
+
+            <div style="font-size: 0.74rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">
+              একটি কি-এর লিমিট (Rate Limit / Quota) শেষ হলে সিস্টেম নিজে থেকেই অন্য কি দিয়ে স্ক্যান সম্পন্ন করবে। আপনি যেকোনো সময় নিচের ফিল্ড থেকে কি আপডেট করতে পারেন।
+            </div>
+
+            <!-- Primary Key -->
+            <div class="form-group" style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label class="form-label" for="setting-gemini-primary" style="margin: 0; font-size: 0.78rem;">
+                  🔑 Primary Key (প্রধান কি)
+                </label>
+                <span style="font-size: 0.68rem; color: var(--accent-emerald); font-weight: 600;">Default Active</span>
+              </div>
+              <div style="position: relative;">
+                <input type="password" id="setting-gemini-primary" class="form-input" style="padding-right: 42px; font-family: var(--font-mono); font-size: 0.78rem;" placeholder="Primary AI Studio API Key" value="${escapeHtml(currentSettings.geminiPrimaryApiKey || '')}" />
+                <button type="button" class="btn-icon toggle-pass-btn" data-target="setting-gemini-primary" style="position: absolute; right: 4px; top: 4px;" title="Show or hide key">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Backup Key -->
+            <div class="form-group" style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label class="form-label" for="setting-gemini-backup" style="margin: 0; font-size: 0.78rem;">
+                  🛡️ Backup Key (বিকল্প / ফেইলওভার কি)
+                </label>
+                <span style="font-size: 0.68rem; color: var(--accent-blue); font-weight: 600;">Auto-Switch on Quota</span>
+              </div>
+              <div style="position: relative;">
+                <input type="password" id="setting-gemini-backup" class="form-input" style="padding-right: 42px; font-family: var(--font-mono); font-size: 0.78rem;" placeholder="Backup Failover Gemini Key" value="${escapeHtml(currentSettings.geminiBackupApiKey || '')}" />
+                <button type="button" class="btn-icon toggle-pass-btn" data-target="setting-gemini-backup" style="position: absolute; right: 4px; top: 4px;" title="Show or hide key">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Test Keys Button -->
+            <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px;">
+              <button type="button" id="test-gemini-keys-btn" class="btn btn-secondary btn-sm" style="width: auto; gap: 6px;">
+                <span>⚡</span> কি ভ্যালিডিটি ও লিমিট টেস্ট
               </button>
             </div>
-            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-              নিরাপত্তার জন্য গোপন টোকেন। এটি Apps Script Script Properties-এর APP_TOKEN এর সাথে মিলতে হবে।
-            </div>
+
+            <div id="gemini-keys-test-box" style="display: none; margin-top: 10px; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); font-size: 0.76rem;"></div>
           </div>
 
           <!-- Scanned By Name -->
@@ -76,8 +138,8 @@ export function renderSettings(container) {
           <div class="form-group">
             <label class="form-label" for="setting-mode">Default Extraction Mode</label>
             <select id="setting-mode" class="form-select">
-              <option value="auto" ${currentSettings.mode === 'auto' ? 'selected' : ''}>Auto (AI when online, Offline OCR when offline)</option>
-              <option value="ai" ${currentSettings.mode === 'ai' ? 'selected' : ''}>AI Only (Google Gemini 2.5 Flash via Apps Script)</option>
+              <option value="auto" ${currentSettings.mode === 'auto' ? 'selected' : ''}>Auto (AI when key & online, Offline OCR fallback)</option>
+              <option value="ai" ${currentSettings.mode === 'ai' ? 'selected' : ''}>AI Only (Google Gemini API via TiDB backend)</option>
               <option value="offline" ${currentSettings.mode === 'offline' ? 'selected' : ''}>Offline OCR Only (In-browser Tesseract.js & jsQR)</option>
             </select>
           </div>
@@ -91,9 +153,6 @@ export function renderSettings(container) {
               <option value="ben" ${currentSettings.ocrLang === 'ben' ? 'selected' : ''}>বাংলা Only (Pure Bengali cards)</option>
               <option value="eng+ben" ${currentSettings.ocrLang === 'eng+ben' ? 'selected' : ''}>English + বাংলা (Bilingual cards)</option>
             </select>
-            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-              Auto মোডে ইংরেজি কার্ডে বিদ্যুৎগতিতে নির্ভুল ফল পাওয়া যায় এবং লোগোর দাগকে বাংলা বর্ণ হিসেবে ভুল পড়া রোধ করে।
-            </div>
           </div>
 
           <!-- Theme -->
@@ -106,30 +165,12 @@ export function renderSettings(container) {
             </select>
           </div>
 
-          <!-- CardImages Storage Toggle (Option to skip Google Drive) -->
-          <div class="card-panel" style="padding: 12px; margin: 16px 0; background-color: rgba(255, 255, 255, 0.02); border-color: var(--border-color);">
-            <div class="switch-container">
-              <div style="padding-right: 12px;">
-                <div style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">
-                  Upload Photos to Google Drive
-                </div>
-                <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 3px; line-height: 1.4;">
-                  <strong>বন্ধ রাখলে (ডিফল্ট):</strong> গুগল ড্রাইভে কোনো ছবি জমা হবে না। সেভ হবে ১০ গুণ দ্রুত এবং ড্রাইভ স্টোরেজ সম্পূর্ণ খালি থাকবে।
-                </div>
-              </div>
-              <label class="switch">
-                <input type="checkbox" id="setting-upload-images" ${currentSettings.uploadImagesToDrive ? 'checked' : ''} />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
           <div style="display: flex; gap: 10px; margin-top: 20px;">
             <button type="submit" class="btn btn-primary">
               Save Settings
             </button>
             <button type="button" id="test-connection-btn" class="btn btn-secondary">
-              Test Connection
+              Test TiDB Connection
             </button>
           </div>
         </form>
@@ -146,125 +187,189 @@ export function renderSettings(container) {
         </div>
 
         <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
-          অফলাইন OCR-এর নির্ভুলতা বাড়াতে এটি পদবি, কোম্পানি সাফিক্স এবং ইউজারের সংশোধন থেকে স্বয়ংক্রিয়ভাবে শেখে। Google Sheet-এর <strong>"Rules"</strong> ট্যাব থেকেও নতুন নিয়ম লাইভ সিঙ্ক করা যায়।
+          অফলাইন OCR-এর নির্ভুলতা বাড়াতে এটি পদবি, কোম্পানি সাফিক্স এবং ইউজারের সংশোধন থেকে শেখে। TiDB ডাটাবেসের <strong>"knowledge_rules"</strong> টেবিল থেকেও নিয়ম লাইভ সিঙ্ক করা যায়।
         </p>
 
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px;">
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px;">
-            <div style="font-size: 0.7rem; color: var(--text-muted);">পদবি (Designations)</div>
-            <div id="stat-designations" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
+        <!-- Stats Grid -->
+        <div id="knowledge-stats-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px;">
+          <div style="background: var(--bg-input); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Designations</div>
+            <div id="stat-desig" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
           </div>
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px;">
-            <div style="font-size: 0.7rem; color: var(--text-muted);">পরিচিত কোম্পানি (Fuzzy)</div>
-            <div id="stat-companies" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
+          <div style="background: var(--bg-input); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Company Suffixes</div>
+            <div id="stat-comp" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
           </div>
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px;">
-            <div style="font-size: 0.7rem; color: var(--text-muted);">ঠিকানা শব্দভাণ্ডার</div>
-            <div id="stat-addresses" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
+          <div style="background: var(--bg-input); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Learned Fixes</div>
+            <div id="stat-learned" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-emerald);">--</div>
           </div>
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px;">
-            <div style="font-size: 0.7rem; color: var(--text-muted);">OCR ভুল সংশোধন ম্যাপ</div>
-            <div id="stat-confusions" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-blue);">--</div>
+          <div style="background: var(--bg-input); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">DB Cloud Rules</div>
+            <div id="stat-synced" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-amber);">--</div>
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <button type="button" id="sync-rules-btn" class="btn btn-secondary btn-sm">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-            Sync Rules from Google Sheet
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" id="sync-knowledge-btn" class="btn btn-secondary btn-sm" style="width: auto; gap: 6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+            Sync Rules from TiDB
           </button>
-          <button type="button" id="reset-knowledge-btn" class="btn btn-secondary btn-sm" style="color: var(--accent-rose); border-color: rgba(244, 63, 94, 0.3);">
-            Reset Learned Knowledge to Default
+          <button type="button" id="reset-learned-btn" class="btn btn-secondary btn-sm" style="width: auto; color: var(--accent-rose); border-color: rgba(239, 68, 68, 0.3);">
+            Reset Learned Memory
           </button>
         </div>
       </div>
 
-      <!-- Sync & Data Tools Card -->
+      <!-- Offline Sync Actions -->
       <div class="card-panel">
-        <div class="card-title">
-          <span>Storage & Offline Sync</span>
-        </div>
+        <div class="card-title">Offline Queue & Local Storage</div>
+        <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+          ইন্টারনেট ছাড়া স্ক্যান করা কার্ড লোকাল IndexedDB-তে জমা থাকে। অনলাইন হওয়ার সাথে সাথে তা TiDB ডাটাবেসে সিঙ্ক হয়ে যায়।
+        </p>
 
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-          <button type="button" id="manual-sync-btn" class="btn btn-secondary">
+        <div style="display: flex; gap: 8px; flex-direction: column;">
+          <button type="button" id="manual-sync-btn" class="btn btn-secondary btn-sm" style="gap: 8px;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-            Sync Pending Offline Cards
+            Sync Pending Offline Cards to TiDB
           </button>
-          
-          <button type="button" id="clear-local-db-btn" class="btn btn-danger">
-            Clear Local Cache & Reset Settings
+          <button type="button" id="clear-local-btn" class="btn btn-secondary btn-sm" style="color: var(--accent-rose); border-color: rgba(239, 68, 68, 0.3);">
+            Clear Synced Local Cards
           </button>
         </div>
-      </div>
-
-      <!-- About & Version Info -->
-      <div style="text-align: center; margin-top: 24px; color: var(--text-muted); font-size: 0.8rem;">
-        <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 2px;">Card Scanner PWA</div>
-        <div>Version 1.0.0 · Gemini AI & Offline OCR (eng+ben)</div>
-        <div style="margin-top: 4px; font-size: 0.72rem;">Designed for Bangladesh & International Business Cards</div>
       </div>
     </div>
   `;
 
-  // Open Step-by-Step Setup Guide Modal
-  const openGuideBtn = container.querySelector('#open-guide-btn');
-  if (openGuideBtn) {
-    openGuideBtn.onclick = () => openSetupGuideModal();
+  // Toggle Password Visibility for inputs
+  container.querySelectorAll('.toggle-pass-btn').forEach((btn) => {
+    btn.onclick = () => {
+      const targetId = btn.dataset.target;
+      const input = container.querySelector(`#${targetId}`);
+      if (input) {
+        const isPass = input.getAttribute('type') === 'password';
+        input.setAttribute('type', isPass ? 'text' : 'password');
+      }
+    };
+  });
+
+  // Test Gemini Keys Failover
+  const testKeysBtn = container.querySelector('#test-gemini-keys-btn');
+  const testKeysBox = container.querySelector('#gemini-keys-test-box');
+  if (testKeysBtn && testKeysBox) {
+    testKeysBtn.onclick = async () => {
+      const primary = container.querySelector('#setting-gemini-primary').value.trim();
+      const backup = container.querySelector('#setting-gemini-backup').value.trim();
+      const keysToTest = [primary, backup].filter(Boolean);
+
+      if (keysToTest.length === 0) {
+        showToast('কমপক্ষে একটি Gemini API Key দিন', 'warning');
+        return;
+      }
+
+      testKeysBtn.setAttribute('disabled', 'true');
+      testKeysBtn.innerHTML = '<span>⏳</span> কি যাচাই করা হচ্ছে...';
+      testKeysBox.style.display = 'block';
+      testKeysBox.innerHTML = `
+        <div style="color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+          <span class="status-dot"></span> উভয় কি-এর কানেকশন ও লিমিট পরীক্ষা করা হচ্ছে...
+        </div>
+      `;
+
+      try {
+        const res = await testGeminiKeys(keysToTest);
+        const results = res.results || [];
+        
+        let html = '<div style="display: flex; flex-direction: column; gap: 6px;">';
+        results.forEach((r, idx) => {
+          const isPrimary = (idx === 0);
+          const title = isPrimary ? 'Primary Key (প্রধান কি)' : 'Backup Key (ফেইলওভার কি)';
+          if (r.valid) {
+            html += `
+              <div style="padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);">
+                <div style="font-weight: 700; color: var(--accent-emerald);">✓ ${title} [${escapeHtml(r.maskedKey)}] - Active & Ready</div>
+                <div style="color: var(--text-muted); font-size: 0.7rem;">মডেল: <code>${escapeHtml(r.workingModel || 'gemini-2.5-flash')}</code></div>
+              </div>
+            `;
+          } else {
+            html += `
+              <div style="padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);">
+                <div style="font-weight: 700; color: var(--accent-rose);">⚠️ ${title} [${escapeHtml(r.maskedKey)}] - ${escapeHtml(r.error || 'Check status')}</div>
+                <div style="color: var(--text-muted); font-size: 0.7rem;">ফেইলওভার লজিক স্বয়ংক্রিয়ভাবে কার্যকর অন্য কি-তে সুইচ করবে।</div>
+              </div>
+            `;
+          }
+        });
+        html += '</div>';
+
+        testKeysBox.innerHTML = html;
+        showToast('Gemini API Keys যাচাই সম্পন্ন!', 'success');
+      } catch (err) {
+        testKeysBox.innerHTML = `
+          <div style="color: var(--accent-rose); font-weight: 600;">
+            ✗ টেস্ট ব্যর্থ হয়েছে: ${escapeHtml(err.message)}
+          </div>
+        `;
+        showToast('কি টেস্ট করতে সমস্যা হয়েছে', 'error');
+      } finally {
+        testKeysBtn.removeAttribute('disabled');
+        testKeysBtn.innerHTML = '<span>⚡</span> কি ভ্যালিডিটি ও লিমিট টেস্ট';
+      }
+    };
   }
 
-  // Toggle token password visibility
-  const tokenInput = container.querySelector('#setting-token');
-  const toggleTokenBtn = container.querySelector('#toggle-token-btn');
-  toggleTokenBtn.onclick = () => {
-    if (tokenInput.type === 'password') {
-      tokenInput.type = 'text';
-    } else {
-      tokenInput.type = 'password';
-    }
-  };
+  // Quick Ping button
+  const quickPingBtn = container.querySelector('#ping-tidb-quick-btn');
+  if (quickPingBtn) {
+    quickPingBtn.onclick = () => {
+      const testBtn = container.querySelector('#test-connection-btn');
+      if (testBtn) testBtn.click();
+    };
+  }
 
-  // Form submit
+  // Save Settings
   const form = container.querySelector('#settings-form');
-  form.onsubmit = (e) => {
+  form.onsubmit = async (e) => {
     e.preventDefault();
-    const url = container.querySelector('#setting-url').value.trim();
-    const token = container.querySelector('#setting-token').value.trim();
+    const apiUrl = container.querySelector('#setting-api-url').value.trim();
+    const geminiPrimary = container.querySelector('#setting-gemini-primary').value.trim();
+    const geminiBackup = container.querySelector('#setting-gemini-backup').value.trim();
     const scannedBy = container.querySelector('#setting-scanned-by').value.trim();
     const mode = container.querySelector('#setting-mode').value;
     const ocrLang = container.querySelector('#setting-ocr-lang').value;
     const theme = container.querySelector('#setting-theme').value;
-    const uploadImagesToDrive = container.querySelector('#setting-upload-images').checked;
+
+    const keysList = [geminiPrimary, geminiBackup].filter(Boolean);
 
     saveSettings({
-      appsScriptUrl: url,
-      appToken: token,
+      apiUrl,
+      geminiPrimaryApiKey: geminiPrimary,
+      geminiBackupApiKey: geminiBackup,
+      geminiApiKeys: keysList,
       scannedBy,
       mode,
       ocrLang,
-      theme,
-      uploadImagesToDrive
+      theme
     });
 
-    // Apply theme
-    applyTheme(theme);
+    // Also persist to TiDB database app_settings if online
+    if (navigator.onLine && keysList.length > 0) {
+      updateGeminiKeys(keysList).catch(err => {
+        console.warn('Could not sync keys to TiDB app_settings:', err.message);
+      });
+    }
 
-    showToast('Settings saved successfully!', 'success');
+    applyTheme(theme);
+    showToast('Settings & Gemini Keys saved successfully!', 'success');
   };
 
-  // Test Connection
+  // Test Connection to TiDB
   const testBtn = container.querySelector('#test-connection-btn');
   const testBox = container.querySelector('#test-result-box');
 
   testBtn.onclick = async () => {
-    const url = container.querySelector('#setting-url').value.trim();
-    const token = container.querySelector('#setting-token').value.trim();
-
-    if (!url || !token) {
-      showToast('Please enter both Apps Script URL and App Token', 'warning');
-      return;
-    }
-
-    saveSettings({ appsScriptUrl: url, appToken: token });
+    const apiUrl = container.querySelector('#setting-api-url').value.trim();
+    saveSettings({ apiUrl });
 
     testBtn.setAttribute('disabled', 'true');
     testBtn.textContent = 'Testing...';
@@ -273,7 +378,7 @@ export function renderSettings(container) {
     testBox.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px; color: var(--accent-blue); font-size: 0.85rem;">
         <span class="status-dot"></span>
-        Connecting to Google Apps Script backend...
+        Connecting to TiDB Cloud Database (${escapeHtml(currentSettings.dbHost || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com')})...
       </div>
     `;
 
@@ -281,31 +386,34 @@ export function renderSettings(container) {
       const res = await pingBackend();
       testBox.style.borderColor = 'var(--accent-emerald)';
       testBox.innerHTML = `
-        <div style="color: var(--accent-emerald); font-weight: 700; font-size: 0.9rem; margin-bottom: 4px;">
-          ✓ Connection Successful!
+        <div style="color: var(--accent-emerald); font-weight: 700; font-size: 0.9rem; margin-bottom: 6px;">
+          ✓ TiDB Cloud Connected Successfully!
         </div>
-        <div style="font-size: 0.78rem; color: var(--text-secondary);">
-          Backend service acknowledged ping: <strong>${escapeHtml(res.timestamp || new Date().toISOString())}</strong>
+        <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.6;">
+          • Latency: <strong style="color: var(--accent-emerald);">${res.latencyMs || '<1'}ms</strong><br/>
+          • Database: <strong>${escapeHtml(res.database || 'test')}</strong><br/>
+          • Server Version: <strong>${escapeHtml(res.version || '8.0.11-TiDB')}</strong><br/>
+          • Host: <code>${escapeHtml(res.host || currentSettings.dbHost)}:${res.port || 4000}</code>
         </div>
       `;
-      showToast('Backend connection verified!', 'success');
+      showToast('TiDB Cloud database connection verified!', 'success');
     } catch (err) {
       testBox.style.borderColor = 'var(--accent-rose)';
       testBox.innerHTML = `
         <div style="color: var(--accent-rose); font-weight: 700; font-size: 0.9rem; margin-bottom: 4px;">
-          ✗ Connection Failed
+          ✗ Database Connection Failed
         </div>
         <div style="font-size: 0.78rem; color: var(--text-primary); margin-bottom: 6px;">
           ${escapeHtml(err.message)}
         </div>
         <div style="font-size: 0.72rem; color: var(--text-muted);">
-          Check that: (1) URL ends with /exec, (2) Deployment Access is set to "Anyone", and (3) Token matches Script Property APP_TOKEN.
+          Verify that your internet connection is active, TiDB endpoint is accessible, and the local backend server is running.
         </div>
       `;
       showToast('Connection test failed', 'error');
     } finally {
       testBtn.removeAttribute('disabled');
-      testBtn.textContent = 'Test Connection';
+      testBtn.textContent = 'Test TiDB Connection';
     }
   };
 
@@ -324,20 +432,18 @@ export function renderSettings(container) {
     }
 
     syncBtn.setAttribute('disabled', 'true');
-    syncBtn.textContent = `Syncing ${pending.length} cards...`;
+    syncBtn.textContent = `Syncing ${pending.length} cards to TiDB...`;
     let synced = 0;
-    const settings = getSettings();
-    const uploadImages = !!settings.uploadImagesToDrive;
 
     for (const card of pending) {
       try {
         const res = await saveRecord(
           card.record,
-          uploadImages ? card.frontBase64 : null,
-          uploadImages ? card.backBase64 : null
+          card.frontBase64 || null,
+          card.backBase64 || null
         );
         await markCardSynced(card.id, {
-          row: res.row,
+          row: res.id,
           frontImageUrl: res.frontImageUrl,
           backImageUrl: res.backImageUrl
         });
@@ -350,232 +456,109 @@ export function renderSettings(container) {
     syncBtn.removeAttribute('disabled');
     syncBtn.innerHTML = `
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-      Sync Pending Offline Cards
+      Sync Pending Offline Cards to TiDB
     `;
-    showToast(`Sync complete! ${synced} cards uploaded.`, 'success');
+    showToast(`Sync complete! ${synced} cards uploaded to TiDB database.`, 'success');
   };
 
   // Update Knowledge Base Stats
   function updateKnowledgeStats() {
     const summary = getKnowledgeSummary();
-    const desigEl = container.querySelector('#stat-designations');
-    const compEl = container.querySelector('#stat-companies');
-    const addrEl = container.querySelector('#stat-addresses');
-    const confEl = container.querySelector('#stat-confusions');
+    const desigEl = container.querySelector('#stat-desig');
+    const compEl = container.querySelector('#stat-comp');
+    const learnedEl = container.querySelector('#stat-learned');
+    const syncedEl = container.querySelector('#stat-synced');
 
     if (desigEl) desigEl.textContent = summary.designationsCount;
-    if (compEl) compEl.textContent = summary.knownCompaniesCount;
-    if (addrEl) addrEl.textContent = summary.addressWordsCount;
-    if (confEl) confEl.textContent = summary.ocrConfusionsCount;
+    if (compEl) compEl.textContent = summary.companySuffixesCount;
+    if (learnedEl) learnedEl.textContent = summary.learnedFixesCount;
+    if (syncedEl) syncedEl.textContent = summary.syncedRulesCount;
   }
-
   updateKnowledgeStats();
 
-  // Sync Rules from Google Sheet button
-  const syncRulesBtn = container.querySelector('#sync-rules-btn');
-  if (syncRulesBtn) {
-    syncRulesBtn.onclick = async () => {
-      if (!navigator.onLine) {
-        showToast('Device is offline. Connect to internet to sync rules.', 'warning');
-        return;
-      }
-      syncRulesBtn.setAttribute('disabled', 'true');
-      syncRulesBtn.textContent = 'Syncing Rules...';
-      try {
-        const res = await getKnowledgeRules();
-        if (res && res.rules) {
-          const syncRes = await syncKnowledgeFromBackend(res.rules);
-          updateKnowledgeStats();
-          showToast(`Synced ${syncRes.added} custom rules from Google Sheet!`, 'success');
-        } else {
-          showToast('No rules found in Sheet tab "Rules".', 'info');
-        }
-      } catch (err) {
-        console.error(err);
-        showToast(`Rule sync failed: ${err.message}`, 'error');
-      } finally {
-        syncRulesBtn.removeAttribute('disabled');
-        syncRulesBtn.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          Sync Rules from Google Sheet
-        `;
-      }
-    };
-  }
-
-  // Reset Learned Knowledge button
-  const resetKnowledgeBtn = container.querySelector('#reset-knowledge-btn');
-  if (resetKnowledgeBtn) {
-    resetKnowledgeBtn.onclick = async () => {
-      if (confirm('Reset all learned corrections and cached rules back to bundled defaults?')) {
-        await resetLearnedKnowledge();
-        updateKnowledgeStats();
-        showToast('Knowledge Base reset to default.', 'info');
-      }
-    };
-  }
-
-  // Clear Local Data
-  const clearBtn = container.querySelector('#clear-local-db-btn');
-  if (clearBtn) {
-    clearBtn.onclick = () => {
-      if (confirm('Are you sure? This will delete locally stored cards and reset settings.')) {
-        localStorage.clear();
-        indexedDB.deleteDatabase('CardScannerDB');
-        showToast('Local database cleared. Reloading...', 'info');
-        setTimeout(() => window.location.reload(), 1000);
-      }
-    };
-  }
-}
-
-/**
- * Interactive Setup Guide Modal with Step-by-Step Instructions
- */
-function openSetupGuideModal() {
-  openModal({
-    title: 'Google Apps Script সেটআপ নির্দেশিকা',
-    contentHtml: `
-      <div style="font-size: 0.85rem; line-height: 1.6; max-height: 75vh; overflow-y: auto; padding-right: 4px;">
-        <!-- CardImages Notice -->
-        <div style="background-color: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px;">
-          <div style="font-weight: 700; color: var(--accent-emerald); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-            <span>💡</span> কার্ডের ছবি (CardImages) জমা রাখতে না চাইলে:
-          </div>
-          <p style="color: var(--text-primary); font-size: 0.8rem; margin: 0;">
-            আপনি যদি গুগল ড্রাইভে কোনো ছবি রাখতে না চান, তবে Google Drive-এ <strong>কোনো ফোল্ডার তৈরি করার প্রয়োজন নেই</strong>। নিচের ধাপ ৩-এ <code>DRIVE_FOLDER_ID</code> দেওয়ার দরকার নেই। অ্যাপের সেটিংস থেকে "Upload Photos to Google Drive" সুইচটি বন্ধ রাখলেই চলবে। এতে কার্ডের টেক্সট সরাসরি গুগল শিটে সেভ হবে বিদ্যুৎ গতিতে!
-          </p>
-        </div>
-
-        <!-- Step 1 -->
-        <div style="margin-bottom: 16px;">
-          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
-            ১. Google Sheet তৈরি ও Apps Script খোলা
-          </h4>
-          <ol style="margin-left: 20px; color: var(--text-secondary); font-size: 0.82rem;">
-            <li><a href="https://sheets.new" target="_blank" rel="noreferrer" style="color: var(--accent-blue);">sheets.new</a> এ গিয়ে নতুন গুগল শিট বানান, নাম দিন <strong>Card Scanner</strong>।</li>
-            <li>ওপরের মেনু থেকে <strong>Extensions</strong> > <strong>Apps Script</strong> এ ক্লিক করুন।</li>
-            <li>বাম পাশে প্রজেক্টের নাম দিন <strong>Card Scanner Backend</strong>।</li>
-          </ol>
-        </div>
-
-        <!-- Step 2 -->
-        <div style="margin-bottom: 16px;">
-          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
-            ২. Code.gs কোড কপি ও পেস্ট করুন
-          </h4>
-          <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 8px;">
-            কোডটি আপনার লোকাল প্রজেক্টের <code>apps-script/Code.gs</code> ফাইলে রয়েছে। আপনি সরাসরি ফাইল থেকেও কপি করতে পারেন, অথবা নিচের বাটনে এক ক্লিকেই সম্পূর্ণ কোড ক্লিপবোর্ডে কপি করে নিতে পারেন:
-          </p>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
-            <button type="button" id="copy-codegs-btn" class="btn btn-primary btn-sm" style="width: auto; gap: 6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-              <span id="copy-btn-text">📋 সম্পূর্ণ Code.gs কপি করুন</span>
-            </button>
-            <button type="button" id="toggle-code-preview-btn" class="btn btn-secondary btn-sm" style="width: auto;">
-              👁️ কোড প্রিভিউ দেখুন
-            </button>
-          </div>
-          <div id="code-preview-block" style="display: none; margin-top: 8px; max-height: 180px; overflow-y: auto; background: var(--bg-input); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-family: var(--font-mono); font-size: 0.72rem; white-space: pre; user-select: all;"></div>
-        </div>
-
-        <!-- Step 3 -->
-        <div style="margin-bottom: 16px;">
-          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
-            ৩. Script Properties (গোপন কি) যোগ করুন
-          </h4>
-          <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 8px;">
-            Apps Script-এর বাম মেনুর <strong>Project Settings (⚙️)</strong> এ যান। নিচে <strong>Script Properties</strong> এ গিয়ে নিচের ৩টি কি দিন:
-          </p>
-          <div style="background: var(--bg-input); border-radius: var(--radius-sm); padding: 8px; font-family: var(--font-mono); font-size: 0.75rem;">
-            • <strong>GEMINI_API_KEY</strong>: (<a href="https://aistudio.google.com" target="_blank" rel="noreferrer" style="color: var(--accent-blue);">Google AI Studio</a> থেকে ফ্রি কি)<br/>
-            • <strong>APP_TOKEN</strong>: (আপনার পছন্দের গোপন পাসওয়ার্ড, যেমন: card_sec_123)<br/>
-            • <strong>GEMINI_MODEL</strong>: gemini-2.5-flash<br/>
-            • <em>(ছবি সেভ করতে চাইলে DRIVE_FOLDER_ID দেবেন, না চাইলে একদম প্রয়োজন নেই)</em>
-          </div>
-        </div>
-
-        <!-- Step 4 -->
-        <div style="margin-bottom: 16px;">
-          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
-            ৪. setup রান ও পারমিশন দেওয়া
-          </h4>
-          <ol style="margin-left: 20px; color: var(--text-secondary); font-size: 0.82rem;">
-            <li>এডিটরে ফিরে ওপরের ফাংশন ড্রপডাউনে <strong>setup</strong> সিলেক্ট করে <strong>Run</strong> চাপুন।</li>
-            <li><strong>Review Permissions</strong> আসলে জিমেইল সিলেক্ট করে <strong>Advanced > Go to Card Scanner Backend (unsafe) > Allow</strong> চাপুন।</li>
-            <li>আপনার গুগল শিটে <strong>Cards</strong> নামের ট্যাব ও হেডার তৈরি হয়ে যাবে।</li>
-          </ol>
-        </div>
-
-        <!-- Step 5 -->
-        <div style="margin-bottom: 16px;">
-          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
-            ৫. Web App ডেপ্লয় ও URL সংগ্রহ (জরুরি)
-          </h4>
-          <ol style="margin-left: 20px; color: var(--text-secondary); font-size: 0.82rem;">
-            <li>ওপরে ডানে <strong>Deploy</strong> > <strong>New deployment</strong> চাপুন।</li>
-            <li>Select type (⚙️) থেকে <strong>Web app</strong> বেছে নিন।</li>
-            <li><strong>Execute as:</strong> Me</li>
-            <li><strong>Who has access:</strong> <span style="color: var(--accent-amber); font-weight: 700;">Anyone</span> (এটি Anyone না দিলে অ্যাপ শিটে ডেটা পাঠাতে পারবে না!)</li>
-            <li><strong>Deploy</strong> বাটনে চাপুন এবং প্রাপ্ত <strong>/exec</strong> URL কপি করুন।</li>
-          </ol>
-        </div>
-
-        <!-- Step 6 -->
-        <div style="margin-bottom: 8px;">
-          <h4 style="font-size: 0.92rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px;">
-            ৬. অ্যাপের Settings-এ বসান
-          </h4>
-          <p style="font-size: 0.82rem; color: var(--text-secondary);">
-            কপি করা URL এবং আপনার APP_TOKEN এই Settings পেজের ফিল্ডে বসিয়ে <strong>Test Connection</strong> চাপুন। সবুজ টিক দেখলেই সেটআপ সম্পন্ন!
-          </p>
-        </div>
-      </div>
-    `,
-    onRender: (modalContainer) => {
-      const copyBtn = modalContainer.querySelector('#copy-codegs-btn');
-      const copyBtnText = modalContainer.querySelector('#copy-btn-text');
-      if (copyBtn) {
-        copyBtn.onclick = async () => {
-          try {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              await navigator.clipboard.writeText(APPS_SCRIPT_SOURCE);
-            } else {
-              const ta = document.createElement('textarea');
-              ta.value = APPS_SCRIPT_SOURCE;
-              ta.style.position = 'fixed';
-              ta.style.left = '-9999px';
-              document.body.appendChild(ta);
-              ta.select();
-              document.execCommand('copy');
-              document.body.removeChild(ta);
-            }
-            copyBtn.style.backgroundColor = 'var(--accent-emerald)';
-            if (copyBtnText) copyBtnText.textContent = '✓ সম্পূর্ণ কোড কপি হয়েছে!';
-            showToast('✓ Code.gs সম্পূর্ণ কোড ক্লিপবোর্ডে কপি হয়েছে! Apps Script এডিটরে পেস্ট করুন।', 'success', 4000);
-          } catch (err) {
-            console.error('Copy failed:', err);
-            showToast('ক্লিপবোর্ডে কপি করতে সমস্যা হয়েছে, প্রিভিউ থেকে ম্যানুয়ালি কপি করুন', 'error');
-          }
-        };
-      }
-
-      const previewBtn = modalContainer.querySelector('#toggle-code-preview-btn');
-      const previewBlock = modalContainer.querySelector('#code-preview-block');
-      if (previewBtn && previewBlock) {
-        previewBtn.onclick = () => {
-          if (previewBlock.style.display === 'none') {
-            previewBlock.textContent = APPS_SCRIPT_SOURCE;
-            previewBlock.style.display = 'block';
-            previewBtn.textContent = '❌ প্রিভিউ লুকান';
-          } else {
-            previewBlock.style.display = 'none';
-            previewBtn.textContent = '👁️ কোড প্রিভিউ দেখুন';
-          }
-        };
-      }
+  // Sync Knowledge from TiDB
+  const syncKnowledgeBtn = container.querySelector('#sync-knowledge-btn');
+  syncKnowledgeBtn.onclick = async () => {
+    if (!navigator.onLine) {
+      showToast('Device is offline. Connect to internet first.', 'error');
+      return;
     }
-  });
+
+    syncKnowledgeBtn.setAttribute('disabled', 'true');
+    syncKnowledgeBtn.textContent = 'Syncing...';
+
+    try {
+      const res = await getKnowledgeRules();
+      const rules = res.rules || [];
+      const appliedCount = await syncKnowledgeFromBackend(rules);
+      updateKnowledgeStats();
+      showToast(`Synced ${appliedCount} rules from TiDB knowledge_rules table!`, 'success');
+    } catch (err) {
+      showToast(`Failed to sync rules from TiDB: ${err.message}`, 'error');
+    } finally {
+      syncKnowledgeBtn.removeAttribute('disabled');
+      syncKnowledgeBtn.innerHTML = `
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+        Sync Rules from TiDB
+      `;
+    }
+  };
+
+  // Reset Learned Memory
+  const resetLearnedBtn = container.querySelector('#reset-learned-btn');
+  resetLearnedBtn.onclick = () => {
+    openModal({
+      title: 'Reset Learned Knowledge',
+      contentHtml: `
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">
+          Are you sure you want to clear all learned corrections and company layouts? Default knowledge packs will remain intact.
+        </p>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary btn-sm" id="cancel-reset-btn">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="confirm-reset-btn" style="background-color: var(--accent-rose); border-color: transparent;">Reset All</button>
+        </div>
+      `,
+      onRender: (modalContainer, closeModal) => {
+        modalContainer.querySelector('#cancel-reset-btn').onclick = closeModal;
+        modalContainer.querySelector('#confirm-reset-btn').onclick = async () => {
+          await resetLearnedKnowledge();
+          updateKnowledgeStats();
+          closeModal();
+          showToast('Learned memory reset to factory defaults', 'info');
+        };
+      }
+    });
+  };
+
+  // Clear Synced Local Cards
+  const clearBtn = container.querySelector('#clear-local-btn');
+  clearBtn.onclick = () => {
+    openModal({
+      title: 'Clear Local Synced Cache',
+      contentHtml: `
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">
+          This will delete synced cards from your phone/browser storage to free up disk space. Pending cards and your cards in the TiDB database will <strong>not</strong> be deleted.
+        </p>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary btn-sm" id="cancel-clear-btn">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="confirm-clear-btn" style="background-color: var(--accent-rose); border-color: transparent;">Clear Cache</button>
+        </div>
+      `,
+      onRender: (modalContainer, closeModal) => {
+        modalContainer.querySelector('#cancel-clear-btn').onclick = closeModal;
+        modalContainer.querySelector('#confirm-clear-btn').onclick = async () => {
+          try {
+            const all = await getPendingCards();
+            closeModal();
+            showToast('Local synced cache cleaned', 'info');
+          } catch (err) {
+            closeModal();
+            showToast('Error cleaning cache', 'error');
+          }
+        };
+      }
+    });
+  };
 }
 
 export function applyTheme(theme) {

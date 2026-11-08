@@ -73,7 +73,7 @@ export async function getAllCardsLocal() {
 }
 
 /**
- * Retrieve all pending cards awaiting sync to Google Sheet
+ * Retrieve all pending cards awaiting sync to TiDB database
  */
 export async function getPendingCards() {
   const db = await getDB();
