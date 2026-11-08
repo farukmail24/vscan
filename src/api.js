@@ -47,15 +47,16 @@ export function getCandidateEndpoints() {
     }
   } else {
     // Under Apache / XAMPP / Local Production
-    candidates.push('/vscan/api/index.php');
     candidates.push('/vscan/api/');
+    candidates.push('/vscan/api');
+    candidates.push('/vscan/php/index.php');
     if (cleanBase) {
       const rootBase = cleanBase.replace(/\/dist\/?$/, '');
-      candidates.push(`${rootBase}/api/index.php`);
-      candidates.push(`${cleanBase}/api/index.php`);
+      candidates.push(`${rootBase}/api/`);
+      candidates.push(`${rootBase}/php/index.php`);
+      candidates.push(`${cleanBase}/php/index.php`);
     }
     candidates.push(`http://${hostname}:3000/api`);
-    candidates.push(`http://${hostname}/vscan/api/index.php`);
     candidates.push('/api');
   }
 

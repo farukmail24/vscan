@@ -17,10 +17,25 @@ export default async function handler(req, res) {
 
   try {
     let body = req.body;
-    if (typeof body === 'string') {
+    if (!body && (req.method === 'POST' || req.method === 'PUT')) {
+      const buffers = [];
+      for await (const chunk of req) {
+        buffers.push(chunk);
+      }
+      const raw = Buffer.concat(buffers).toString('utf-8');
+      if (raw) {
+        try {
+          body = JSON.parse(raw);
+        } catch (_) {
+          body = {};
+        }
+      }
+    } else if (typeof body === 'string') {
       try {
         body = JSON.parse(body);
-      } catch (_) {}
+      } catch (_) {
+        body = {};
+      }
     }
     body = body || {};
 

@@ -11,7 +11,7 @@ Options +FollowSymLinks -Indexes
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  # Route /api and /api/* directly to api/index.php without redirects
-  RewriteRule ^api/?$ api/index.php [QSA,L]
-  RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+  # Route /api and /api/* directly to php/index.php without redirects
+  RewriteRule ^api/?$ php/index.php [QSA,L]
+  RewriteRule ^api/(.*)$ php/index.php [QSA,L]
 </IfModule>
