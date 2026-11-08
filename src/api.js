@@ -31,31 +31,32 @@ export function getCandidateEndpoints() {
     candidates.push(configured);
   }
 
+  const hostname = window.location.hostname || 'localhost';
   const port = window.location.port;
   const isVite = port === '3000';
   const pathname = window.location.pathname || '';
   const cleanBase = pathname.replace(/\/([^\/]+\.[^\/]+|\/?)$/, '');
 
   if (isVite) {
+    // Under Vite dev server, /api is handled directly by Vite plugin middleware
+    candidates.push('/api');
+    candidates.push(`http://${hostname}:3000/api`);
+    candidates.push(`http://${hostname}/vscan/api/index.php`);
+    candidates.push('/vscan/api/index.php');
+  } else {
+    // Under Apache / Production
+    if (cleanBase) {
+      const rootBase = cleanBase.replace(/\/dist\/?$/, '');
+      candidates.push(`${rootBase}/api/index.php`);
+      candidates.push(`${cleanBase}/api/index.php`);
+      candidates.push(`${rootBase}/api/`);
+    }
+    candidates.push('/vscan/api/index.php');
+    candidates.push('/vscan/api/');
+    candidates.push(`http://${hostname}:3000/api`);
+    candidates.push(`http://${hostname}/vscan/api/index.php`);
     candidates.push('/api');
   }
-
-  // 3. Direct PHP endpoints in XAMPP
-  candidates.push('api/index.php');
-  candidates.push('../api/index.php');
-
-  if (cleanBase) {
-    candidates.push(`${cleanBase}/api/index.php`);
-    candidates.push(`${cleanBase}/api/`);
-    candidates.push(`${cleanBase}/api`);
-  }
-
-  // 4. Default standard locations
-  candidates.push('/vscan/api/index.php');
-  candidates.push('/vscan/api/');
-  candidates.push('/api');
-  candidates.push('http://localhost:3000/api');
-  candidates.push('http://localhost/vscan/api/index.php');
 
   // Deduplicate candidates
   const seen = new Set();
@@ -118,6 +119,7 @@ export async function callBackend(action, payload = {}) {
           cachedWorkingEndpoint = url; // Remember working endpoint
           return result;
         } else if (result && result.error) {
+          cachedWorkingEndpoint = null;
           throw new Error(result.error);
         }
       } else {
@@ -131,6 +133,7 @@ export async function callBackend(action, payload = {}) {
     }
   }
 
+  cachedWorkingEndpoint = null;
   throw new Error(`Connection to TiDB backend failed across all endpoints:\n` + errors.slice(0, 3).join('\n'));
 }
 

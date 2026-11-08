@@ -45,7 +45,7 @@ function resolveGeminiKeysPhp($payload) {
 }
 
 function testGeminiKeyPhp($key) {
-    $models = ['gemini-2.5-flash', 'gemini-3.8-flash'];
+    $models = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
     foreach ($models as $m) {
         $ch = curl_init("https://generativelanguage.googleapis.com/v1beta/models/{$m}:generateContent?key={$key}");
         curl_setopt_array($ch, [
@@ -116,7 +116,7 @@ Return ONLY valid JSON matching this schema:
 
     $errors = [];
     foreach ($keys as $idx => $apiKey) {
-        $candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash'];
+        $candidateModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
         foreach ($candidateModels as $model) {
             $ch = curl_init("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}");
             curl_setopt_array($ch, [

@@ -120,7 +120,7 @@ describe('TiDB Cloud Backend API Suite', () => {
     expect(res.data).toBeDefined();
     expect(res.usedKeyIndex).toBe(1); // Successfully failed over to 2nd key!
     expect(res.keySwitched).toBe(true);
-  });
+  }, 25000);
 
   it('deletes the test card cleanly', async () => {
     const res = await handleApiRequest('deleteCard', { id: testId });

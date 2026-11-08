@@ -85,7 +85,7 @@ async function handleTestGeminiKeys(payload = {}) {
 
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    const candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash'];
+    const candidateModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
     let success = false;
     let errorDetail = '';
     let workingModel = '';
@@ -227,7 +227,7 @@ Return ONLY valid JSON matching this schema:
 
   for (let i = 0; i < keys.length; i++) {
     const apiKey = keys[i];
-    const candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash'];
+    const candidateModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
     let keySucceeded = false;
 
     for (const model of candidateModels) {
