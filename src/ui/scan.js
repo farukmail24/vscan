@@ -7,6 +7,8 @@
 import { loadImage, resizeToMax, toJpegBlob, toBase64 } from '../image.js';
 import { extractWithAI } from '../api.js';
 import { extractOffline } from '../ocr.js';
+import { autoDetectAndCrop } from '../cropper.js';
+import { openCardCropper } from './cropperModal.js';
 import { getSettings, updateSetting } from '../settings.js';
 import { setCurrentScan, getState } from '../store.js';
 import { showToast } from './toast.js';
@@ -19,10 +21,12 @@ export function renderScan(container) {
   let frontBlob = null;
   let frontBase64 = null;
   let frontMeta = null;
+  let frontRawCanvas = null;
 
   let backBlob = null;
   let backBase64 = null;
   let backMeta = null;
+  let backRawCanvas = null;
 
   let isExtracting = false;
 
@@ -90,7 +94,7 @@ export function renderScan(container) {
               </svg>
             </div>
             <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 4px;">Take Photo of Front Side</div>
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">Align card within the frame</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">Align card within the frame · Auto-crops card boundaries</div>
             
             <div style="display: flex; gap: 8px; justify-content: center;">
               <button type="button" id="front-snap-btn" class="btn btn-primary btn-sm">
@@ -109,6 +113,10 @@ export function renderScan(container) {
             <div class="capture-overlay">
               <span id="front-info-text" class="capture-meta-text"></span>
               <div class="capture-actions">
+                <button type="button" id="front-crop-btn" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;" title="Crop or rotate card">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"></path><path d="M18 22V8a2 2 0 0 0-2-2H2"></path></svg>
+                  Crop
+                </button>
                 <button type="button" id="front-retake-btn" class="btn btn-secondary btn-sm">Retake</button>
                 <button type="button" id="front-clear-btn" class="btn btn-danger btn-sm">Clear</button>
               </div>
@@ -142,6 +150,10 @@ export function renderScan(container) {
             <div class="capture-overlay">
               <span id="back-info-text" class="capture-meta-text"></span>
               <div class="capture-actions">
+                <button type="button" id="back-crop-btn" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;" title="Crop or rotate card">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"></path><path d="M18 22V8a2 2 0 0 0-2-2H2"></path></svg>
+                  Crop
+                </button>
                 <button type="button" id="back-retake-btn" class="btn btn-secondary btn-sm">Retake</button>
                 <button type="button" id="back-clear-btn" class="btn btn-danger btn-sm">Clear</button>
               </div>
@@ -234,6 +246,41 @@ export function renderScan(container) {
   container.querySelector('#back-retake-btn').onclick = () => backCamInput.click();
   container.querySelector('#back-clear-btn').onclick = () => clearBack();
 
+  // Crop button handlers (Manual interactive card cropper)
+  const frontCropBtn = container.querySelector('#front-crop-btn');
+  if (frontCropBtn) {
+    frontCropBtn.onclick = () => {
+      const sourceCanvas = frontRawCanvas || frontMeta?.canvas;
+      if (!sourceCanvas) return;
+      openCardCropper(sourceCanvas, {
+        onApply: ({ canvas, blob, base64, meta }) => {
+          frontBlob = blob;
+          frontBase64 = base64;
+          frontMeta = meta;
+          frontPreviewImg.src = base64;
+          frontInfoText.textContent = `${meta.width}x${meta.height} · ${meta.sizeKb} KB (Cropped)`;
+        }
+      });
+    };
+  }
+
+  const backCropBtn = container.querySelector('#back-crop-btn');
+  if (backCropBtn) {
+    backCropBtn.onclick = () => {
+      const sourceCanvas = backRawCanvas || backMeta?.canvas;
+      if (!sourceCanvas) return;
+      openCardCropper(sourceCanvas, {
+        onApply: ({ canvas, blob, base64, meta }) => {
+          backBlob = blob;
+          backBase64 = base64;
+          backMeta = meta;
+          backPreviewImg.src = base64;
+          backInfoText.textContent = `${meta.width}x${meta.height} · ${meta.sizeKb} KB (Cropped)`;
+        }
+      });
+    };
+  }
+
   frontCamInput.onchange = (e) => handleImageUpload(e.target.files[0], 'front');
   frontGalInput.onchange = (e) => handleImageUpload(e.target.files[0], 'front');
   backCamInput.onchange = (e) => handleImageUpload(e.target.files[0], 'back');
@@ -243,21 +290,31 @@ export function renderScan(container) {
     if (!file) return;
 
     try {
-      showToast(`Optimizing ${side} image...`, 'info', 1500);
+      showToast(`Analyzing ${side} image...`, 'info', 1500);
 
       const img = await loadImage(file);
-      const canvas = resizeToMax(img, 1600);
-      const blob = await toJpegBlob(canvas, 0.85);
+      const rawCanvas = resizeToMax(img, 1600);
+
+      // Automatically detect card boundaries against table/desk surface
+      const { canvas: autoCanvas, wasCropped } = autoDetectAndCrop(rawCanvas);
+      const finalCanvas = wasCropped ? autoCanvas : rawCanvas;
+
+      if (wasCropped) {
+        showToast('Card edges detected & auto-cropped!', 'success', 2200);
+      }
+
+      const blob = await toJpegBlob(finalCanvas, 0.88);
       const base64 = await toBase64(blob);
 
       const meta = {
-        width: canvas.width,
-        height: canvas.height,
+        width: finalCanvas.width,
+        height: finalCanvas.height,
         sizeKb: Math.round(blob.size / 1024),
-        canvas
+        canvas: finalCanvas
       };
 
       if (side === 'front') {
+        frontRawCanvas = rawCanvas;
         frontBlob = blob;
         frontBase64 = base64;
         frontMeta = meta;
@@ -266,10 +323,11 @@ export function renderScan(container) {
         frontPlaceholder.style.display = 'none';
         frontPreviewContainer.style.display = 'block';
         frontBox.classList.add('has-preview');
-        frontInfoText.textContent = `${meta.width}x${meta.height} · ${meta.sizeKb} KB`;
+        frontInfoText.textContent = `${meta.width}x${meta.height} · ${meta.sizeKb} KB${wasCropped ? ' (Auto)' : ''}`;
 
         extractBtn.removeAttribute('disabled');
       } else {
+        backRawCanvas = rawCanvas;
         backBlob = blob;
         backBase64 = base64;
         backMeta = meta;
@@ -278,7 +336,7 @@ export function renderScan(container) {
         backPlaceholder.style.display = 'none';
         backPreviewContainer.style.display = 'block';
         backBox.classList.add('has-preview');
-        backInfoText.textContent = `${meta.width}x${meta.height} · ${meta.sizeKb} KB`;
+        backInfoText.textContent = `${meta.width}x${meta.height} · ${meta.sizeKb} KB${wasCropped ? ' (Auto)' : ''}`;
       }
     } catch (err) {
       console.error(err);
@@ -290,6 +348,7 @@ export function renderScan(container) {
     frontBlob = null;
     frontBase64 = null;
     frontMeta = null;
+    frontRawCanvas = null;
     frontPreviewImg.src = '';
     frontPreviewContainer.style.display = 'none';
     frontPlaceholder.style.display = 'block';
@@ -301,6 +360,7 @@ export function renderScan(container) {
     backBlob = null;
     backBase64 = null;
     backMeta = null;
+    backRawCanvas = null;
     backPreviewImg.src = '';
     backPreviewContainer.style.display = 'none';
     backPlaceholder.style.display = 'block';

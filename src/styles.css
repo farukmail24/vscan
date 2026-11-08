@@ -484,22 +484,27 @@ input, textarea {
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.88) 35%);
   padding: 10px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .capture-meta-text {
   font-size: 0.75rem;
   color: #e2e8f0;
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .capture-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .btn-sm {
@@ -741,6 +746,145 @@ input:checked + .slider {
 
 input:checked + .slider:before {
   transform: translateX(20px);
+}
+
+/* Interactive Business Card Cropper Modal */
+.cropper-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  background-color: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.cropper-modal-container {
+  width: 100%;
+  max-width: 600px;
+  height: 92vh;
+  max-height: 800px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.cropper-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cropper-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.cropper-close-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
+}
+
+.cropper-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background-color: #030712;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+.cropper-viewport {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.cropper-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.cropper-selection-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid #3b82f6;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65), 0 0 15px rgba(59, 130, 246, 0.5);
+  cursor: move;
+  touch-action: none;
+}
+
+.cropper-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cropper-grid-line {
+  position: absolute;
+  background-color: rgba(255, 255, 255, 0.25);
+}
+
+.cropper-grid-line.v1 { left: 33.33%; top: 0; bottom: 0; width: 1px; }
+.cropper-grid-line.v2 { left: 66.66%; top: 0; bottom: 0; width: 1px; }
+.cropper-grid-line.h1 { top: 33.33%; left: 0; right: 0; height: 1px; }
+.cropper-grid-line.h2 { top: 66.66%; left: 0; right: 0; height: 1px; }
+
+.cropper-handle {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  background-color: #3b82f6;
+  border: 2.5px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  touch-action: none;
+}
+
+.cropper-handle.nw { top: -13px; left: -13px; cursor: nwse-resize; }
+.cropper-handle.ne { top: -13px; right: -13px; cursor: nesw-resize; }
+.cropper-handle.se { bottom: -13px; right: -13px; cursor: nwse-resize; }
+.cropper-handle.sw { bottom: -13px; left: -13px; cursor: nesw-resize; }
+
+.cropper-toolbar {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.cropper-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  background-color: var(--bg-card);
 }
 
 @media (prefers-reduced-motion: reduce) {
