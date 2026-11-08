@@ -36,13 +36,20 @@ export function getCandidateEndpoints() {
   const isVite = port === '3000';
   const pathname = window.location.pathname || '';
   const cleanBase = pathname.replace(/\/([^\/]+\.[^\/]+|\/?)$/, '');
+  const isCloudHost = hostname.includes('vercel.app') ||
+                      hostname.includes('netlify.app') ||
+                      hostname.includes('railway.app') ||
+                      hostname.includes('render.com') ||
+                      hostname.includes('github.io');
 
-  if (isVite) {
-    // Under Vite dev server, /api is handled directly by Vite plugin middleware
+  if (isVite || isCloudHost) {
+    // Under Vite dev server or Vercel / Cloud serverless hosting
     candidates.push('/api');
     candidates.push(`http://${hostname}:3000/api`);
-    candidates.push(`http://${hostname}/vscan/api/index.php`);
-    candidates.push('/vscan/api/index.php');
+    if (!isCloudHost) {
+      candidates.push(`http://${hostname}/vscan/api/index.php`);
+      candidates.push('/vscan/api/index.php');
+    }
   } else {
     // Under Apache / Production
     if (cleanBase) {
