@@ -67,9 +67,9 @@ export function renderSettings(container) {
           <!-- API Endpoint URL -->
           <div class="form-group">
             <label class="form-label" for="setting-api-url">Backend API Endpoint</label>
-            <input type="text" id="setting-api-url" class="form-input" placeholder="/api or http://localhost:3000/api" value="${escapeHtml(currentSettings.apiUrl || '/api')}" required />
+            <input type="text" id="setting-api-url" class="form-input" placeholder="Auto-detect (e.g. /api or /vscan/api/index.php)" value="${escapeHtml(currentSettings.apiUrl && currentSettings.apiUrl !== '/api' ? currentSettings.apiUrl : '')}" />
             <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-              লোকাল Vite সার্ভার বা Apache XAMPP API পাথ। ডিফল্ট: <code>/api</code>
+              লোকাল Vite (<code>/api</code>) বা Apache XAMPP (<code>/vscan/api/index.php</code>)। ফাঁকা রাখলে স্বয়ংক্রিয়ভাবে সক্রিয় পাথ নির্বাচন হবে।
             </div>
           </div>
 

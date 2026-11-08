@@ -6,7 +6,7 @@
 const STORAGE_KEY = 'card_scanner_settings';
 
 const DEFAULT_SETTINGS = {
-  apiUrl: '/api',
+  apiUrl: '',
   dbHost: 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
   dbPort: '4000',
   dbName: 'test',

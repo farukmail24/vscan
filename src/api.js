@@ -26,11 +26,6 @@ export function getCandidateEndpoints() {
     candidates.push(cachedWorkingEndpoint);
   }
 
-  // 2. User configured endpoint (if any)
-  if (configured) {
-    candidates.push(configured);
-  }
-
   const hostname = window.location.hostname || 'localhost';
   const port = window.location.port;
   const isVite = port === '3000';
@@ -51,18 +46,22 @@ export function getCandidateEndpoints() {
       candidates.push('/vscan/api/index.php');
     }
   } else {
-    // Under Apache / Production
+    // Under Apache / XAMPP / Local Production
+    candidates.push('/vscan/api/index.php');
+    candidates.push('/vscan/api/');
     if (cleanBase) {
       const rootBase = cleanBase.replace(/\/dist\/?$/, '');
       candidates.push(`${rootBase}/api/index.php`);
       candidates.push(`${cleanBase}/api/index.php`);
-      candidates.push(`${rootBase}/api/`);
     }
-    candidates.push('/vscan/api/index.php');
-    candidates.push('/vscan/api/');
     candidates.push(`http://${hostname}:3000/api`);
     candidates.push(`http://${hostname}/vscan/api/index.php`);
     candidates.push('/api');
+  }
+
+  // 2. User configured endpoint (if any and custom)
+  if (configured && configured !== '/api') {
+    candidates.unshift(configured);
   }
 
   // Deduplicate candidates
