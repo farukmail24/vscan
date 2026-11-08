@@ -21,14 +21,15 @@ export function renderSettings(container) {
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
           <div>
             <div style="font-size: 0.95rem; font-weight: 700; color: var(--accent-emerald); display: flex; align-items: center; gap: 6px;">
-              <span>⚡</span> TiDB Cloud MySQL কানেকশন
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg> TiDB Cloud MySQL কানেকশন
             </div>
             <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 3px;">
               ডাটাবেস: <strong>test</strong> | ক্লাউড রিজিয়ন: <strong>AWS ap-southeast-1</strong>
             </div>
           </div>
-          <button type="button" id="ping-tidb-quick-btn" class="btn btn-primary btn-sm" style="flex-shrink: 0; width: auto; padding: 6px 14px; background: var(--accent-emerald); border-color: var(--accent-emerald); color: #000; font-weight: 700;">
-            📡 পিং টেস্ট
+          <button type="button" id="ping-tidb-quick-btn" class="btn btn-primary btn-sm" style="flex-shrink: 0; width: auto; padding: 6px 14px; background: var(--accent-emerald); border-color: var(--accent-emerald); color: #000; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"></path></svg>
+            পিং টেস্ট
           </button>
         </div>
       </div>
@@ -77,7 +78,8 @@ export function renderSettings(container) {
           <div style="background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: var(--radius-md); padding: 14px; margin: 16px 0;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <div style="font-size: 0.88rem; font-weight: 700; color: var(--accent-blue); display: flex; align-items: center; gap: 6px;">
-                <span>✨</span> Gemini AI Keys & Auto-Failover
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                Gemini AI Keys & Auto-Failover
               </div>
               <span class="badge badge-ai" style="font-size: 0.68rem;">2-Key Failover Active</span>
             </div>
@@ -89,8 +91,9 @@ export function renderSettings(container) {
             <!-- Primary Key -->
             <div class="form-group" style="margin-bottom: 12px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <label class="form-label" for="setting-gemini-primary" style="margin: 0; font-size: 0.78rem;">
-                  🔑 Primary Key (প্রধান কি)
+                <label class="form-label" for="setting-gemini-primary" style="margin: 0; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 5px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"></circle><path d="m21 2-9.6 9.6M15.5 7.5l3 3M18.5 4.5l3 3"></path></svg>
+                  Primary Key (প্রধান কি)
                 </label>
                 <span style="font-size: 0.68rem; color: var(--accent-emerald); font-weight: 600;">Default Active</span>
               </div>
@@ -105,8 +108,9 @@ export function renderSettings(container) {
             <!-- Backup Key -->
             <div class="form-group" style="margin-bottom: 12px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <label class="form-label" for="setting-gemini-backup" style="margin: 0; font-size: 0.78rem;">
-                  🛡️ Backup Key (বিকল্প / ফেইলওভার কি)
+                <label class="form-label" for="setting-gemini-backup" style="margin: 0; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 5px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                  Backup Key (বিকল্প / ফেইলওভার কি)
                 </label>
                 <span style="font-size: 0.68rem; color: var(--accent-blue); font-weight: 600;">Auto-Switch on Quota</span>
               </div>
@@ -120,8 +124,9 @@ export function renderSettings(container) {
 
             <!-- Test Keys Button -->
             <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px;">
-              <button type="button" id="test-gemini-keys-btn" class="btn btn-secondary btn-sm" style="width: auto; gap: 6px;">
-                <span>⚡</span> কি ভ্যালিডিটি ও লিমিট টেস্ট
+              <button type="button" id="test-gemini-keys-btn" class="btn btn-secondary btn-sm" style="width: auto; gap: 6px; display: inline-flex; align-items: center;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                <span>কি ভ্যালিডিটি ও লিমিট টেস্ট</span>
               </button>
             </div>
 
@@ -148,7 +153,7 @@ export function renderSettings(container) {
           <div class="form-group">
             <label class="form-label" for="setting-ocr-lang">Offline OCR Language Engine</label>
             <select id="setting-ocr-lang" class="form-select">
-              <option value="auto" ${(currentSettings.ocrLang || 'auto') === 'auto' ? 'selected' : ''}>⚡ Auto (Fast English first, Bengali fallback)</option>
+              <option value="auto" ${(currentSettings.ocrLang || 'auto') === 'auto' ? 'selected' : ''}>Auto (Fast English first, Bengali fallback)</option>
               <option value="eng" ${currentSettings.ocrLang === 'eng' ? 'selected' : ''}>English Only (Fastest, zero Bengali artifacts)</option>
               <option value="ben" ${currentSettings.ocrLang === 'ben' ? 'selected' : ''}>বাংলা Only (Pure Bengali cards)</option>
               <option value="eng+ben" ${currentSettings.ocrLang === 'eng+ben' ? 'selected' : ''}>English + বাংলা (Bilingual cards)</option>
@@ -182,7 +187,7 @@ export function renderSettings(container) {
       <!-- Knowledge Base & Learning Engine Card -->
       <div class="card-panel">
         <div class="card-title">
-          <span>🧠 Knowledge Base & Learning Engine</span>
+          <span>Knowledge Base & Learning Engine</span>
           <span class="badge badge-offline">Offline Enhancer</span>
         </div>
 
@@ -287,14 +292,20 @@ export function renderSettings(container) {
           if (r.valid) {
             html += `
               <div style="padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);">
-                <div style="font-weight: 700; color: var(--accent-emerald);">✓ ${title} [${escapeHtml(r.maskedKey)}] - Active & Ready</div>
+                <div style="font-weight: 700; color: var(--accent-emerald); display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  ${title} [${escapeHtml(r.maskedKey)}] - Active & Ready
+                </div>
                 <div style="color: var(--text-muted); font-size: 0.7rem;">মডেল: <code>${escapeHtml(r.workingModel || 'gemini-2.5-flash')}</code></div>
               </div>
             `;
           } else {
             html += `
               <div style="padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);">
-                <div style="font-weight: 700; color: var(--accent-rose);">⚠️ ${title} [${escapeHtml(r.maskedKey)}] - ${escapeHtml(r.error || 'Check status')}</div>
+                <div style="font-weight: 700; color: var(--accent-rose); display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  ${title} [${escapeHtml(r.maskedKey)}] - ${escapeHtml(r.error || 'Check status')}
+                </div>
                 <div style="color: var(--text-muted); font-size: 0.7rem;">ফেইলওভার লজিক স্বয়ংক্রিয়ভাবে কার্যকর অন্য কি-তে সুইচ করবে।</div>
               </div>
             `;
@@ -306,14 +317,18 @@ export function renderSettings(container) {
         showToast('Gemini API Keys যাচাই সম্পন্ন!', 'success');
       } catch (err) {
         testKeysBox.innerHTML = `
-          <div style="color: var(--accent-rose); font-weight: 600;">
-            ✗ টেস্ট ব্যর্থ হয়েছে: ${escapeHtml(err.message)}
+          <div style="color: var(--accent-rose); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="18" x2="18" y2="18"></line></svg>
+            টেস্ট ব্যর্থ হয়েছে: ${escapeHtml(err.message)}
           </div>
         `;
         showToast('কি টেস্ট করতে সমস্যা হয়েছে', 'error');
       } finally {
         testKeysBtn.removeAttribute('disabled');
-        testKeysBtn.innerHTML = '<span>⚡</span> কি ভ্যালিডিটি ও লিমিট টেস্ট';
+        testKeysBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+          <span>কি ভ্যালিডিটি ও লিমিট টেস্ট</span>
+        `;
       }
     };
   }
@@ -388,8 +403,9 @@ export function renderSettings(container) {
       const activeEndpoint = getActiveEndpoint() || apiUrl || '/api';
       testBox.style.borderColor = 'var(--accent-emerald)';
       testBox.innerHTML = `
-        <div style="color: var(--accent-emerald); font-weight: 700; font-size: 0.9rem; margin-bottom: 6px;">
-          ✓ TiDB Cloud Connected Successfully!
+        <div style="color: var(--accent-emerald); font-weight: 700; font-size: 0.9rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          TiDB Cloud Connected Successfully!
         </div>
         <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.6;">
           • Latency: <strong style="color: var(--accent-emerald);">${res.latencyMs || '<1'}ms</strong><br/>
@@ -403,8 +419,9 @@ export function renderSettings(container) {
     } catch (err) {
       testBox.style.borderColor = 'var(--accent-rose)';
       testBox.innerHTML = `
-        <div style="color: var(--accent-rose); font-weight: 700; font-size: 0.9rem; margin-bottom: 4px;">
-          ✗ Database Connection Failed
+        <div style="color: var(--accent-rose); font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="18" x2="18" y2="18"></line></svg>
+          Database Connection Failed
         </div>
         <div style="font-size: 0.78rem; color: var(--text-primary); margin-bottom: 6px; word-break: break-all;">
           ${escapeHtml(err.message)}

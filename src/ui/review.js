@@ -102,8 +102,9 @@ export function renderReview(container) {
       ${ocrLines && ocrLines.length > 0 ? `
         <div class="card-panel" style="margin-bottom: 14px; border-color: rgba(59, 130, 246, 0.4);">
           <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent-blue);">
-              ⚡ Tap-to-Assign OCR Lines
+            <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent-blue); display: flex; align-items: center; gap: 6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M7 8h10M7 12h10M7 16h6"></path></svg>
+              Tap-to-Assign OCR Lines
             </div>
             <span style="font-size: 0.72rem; color: var(--text-muted);">${ocrLines.length} lines detected</span>
           </div>
@@ -141,7 +142,7 @@ export function renderReview(container) {
             </div>
           </div>
           <input type="text" id="field-name" class="form-input ${uncertainFields.has('name') ? 'is-uncertain' : ''}" value="${escapeHtml(record.name || '')}" placeholder="e.g. Tanvir Ahmed" />
-          ${uncertainFields.has('name') ? '<div class="field-hint">⚠️ Please verify extracted name</div>' : ''}
+          ${uncertainFields.has('name') ? '<div class="field-hint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 3px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Please verify extracted name</div>' : ''}
         </div>
 
         <!-- Designation -->
@@ -158,7 +159,7 @@ export function renderReview(container) {
             </div>
           </div>
           <input type="text" id="field-designation" class="form-input ${uncertainFields.has('designation') ? 'is-uncertain' : ''}" value="${escapeHtml(record.designation || '')}" placeholder="e.g. Managing Director" />
-          ${uncertainFields.has('designation') ? '<div class="field-hint">⚠️ Please verify designation</div>' : ''}
+          ${uncertainFields.has('designation') ? '<div class="field-hint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 3px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Please verify designation</div>' : ''}
         </div>
 
         <!-- Company -->
@@ -175,7 +176,7 @@ export function renderReview(container) {
             </div>
           </div>
           <input type="text" id="field-company" class="form-input ${uncertainFields.has('company') ? 'is-uncertain' : ''}" value="${escapeHtml(record.company || '')}" placeholder="e.g. Apex Technologies Ltd." />
-          ${uncertainFields.has('company') ? '<div class="field-hint">⚠️ Please verify company</div>' : ''}
+          ${uncertainFields.has('company') ? '<div class="field-hint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 3px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Please verify company</div>' : ''}
         </div>
 
         <!-- Phone 1 & Phone 2 -->
@@ -188,7 +189,7 @@ export function renderReview(container) {
               </button>
             </div>
             <input type="tel" id="field-phone1" class="form-input ${uncertainFields.has('phone1') ? 'is-uncertain' : ''}" value="${escapeHtml(phones[0] || '')}" placeholder="+8801XXXXXXXXX" />
-            ${uncertainFields.has('phone1') ? '<div class="field-hint">⚠️ Invalid BD phone</div>' : ''}
+            ${uncertainFields.has('phone1') ? '<div class="field-hint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 3px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Invalid BD phone</div>' : ''}
           </div>
 
           <div class="form-group">
@@ -227,7 +228,7 @@ export function renderReview(container) {
             </div>
           </div>
           <textarea id="field-address" class="form-textarea ${uncertainFields.has('address') ? 'is-uncertain' : ''}" rows="2" placeholder="House, Road, Area, City">${escapeHtml(record.address || '')}</textarea>
-          ${uncertainFields.has('address') ? '<div class="field-hint">⚠️ Please verify address</div>' : ''}
+          ${uncertainFields.has('address') ? '<div class="field-hint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 3px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Please verify address</div>' : ''}
         </div>
 
         <!-- Notes -->
@@ -432,7 +433,7 @@ export function renderReview(container) {
       }
 
       if (learnedCount > 0) {
-        showToast(`🧠 Learned ${learnedCount} correction${learnedCount > 1 ? 's' : ''} to improve future scans!`, 'info', 3000);
+        showToast(`Learned ${learnedCount} correction${learnedCount > 1 ? 's' : ''} to improve future scans!`, 'info', 3000);
       }
     } catch (learnErr) {
       console.warn('Learning loop non-blocking error:', learnErr);

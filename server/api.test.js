@@ -95,7 +95,7 @@ describe('TiDB Cloud Backend API Suite', () => {
   });
 
   it('tests Gemini keys and returns health status per key', async () => {
-    const key = process.env.GEMINI_API_KEY_1;
+    const key = process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY_1;
     if (!key) return;
     const res = await handleApiRequest('testGeminiKeys', {
       geminiApiKeys: [key]
@@ -106,13 +106,13 @@ describe('TiDB Cloud Backend API Suite', () => {
   });
 
   it('performs extraction and automatically switches keys if first key fails', async () => {
-    const key = process.env.GEMINI_API_KEY_1;
-    if (!key) return;
-    // Key 1 is intentionally invalid to trigger immediate failover to Key 2
+    const validKey = process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY_1;
+    if (!validKey) return;
+    // Key 1 is intentionally invalid to trigger immediate failover to the active working key
     const res = await handleApiRequest('extract', {
       geminiApiKeys: [
         'INVALID_MOCK_KEY_FORCING_FAILOVER',
-        key
+        validKey
       ]
     });
 

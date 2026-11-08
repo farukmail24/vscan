@@ -296,8 +296,9 @@ export async function renderHistory(container) {
 
           <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 8px;">
             ${canReExtract ? `
-              <button type="button" id="re-extract-btn" class="btn btn-secondary">
-                ✨ Re-extract with Gemini AI
+              <button type="button" id="re-extract-btn" class="btn btn-secondary" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M21 21v-5h-5"/></svg>
+                Re-extract with Gemini AI
               </button>
             ` : ''}
             <button type="button" id="share-vcard-btn" class="btn btn-secondary">
@@ -360,7 +361,10 @@ export async function renderHistory(container) {
             } catch (err) {
               showToast(`AI extraction failed: ${err.message}`, 'error');
               reExtractBtn.removeAttribute('disabled');
-              reExtractBtn.textContent = '✨ Re-extract with Gemini AI';
+              reExtractBtn.innerHTML = `
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M21 21v-5h-5"/></svg>
+                Re-extract with Gemini AI
+              `;
             }
           };
         }
