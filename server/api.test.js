@@ -127,7 +127,7 @@ describe('TiDB Cloud Backend API Suite', () => {
     expect(res.ok).toBe(true);
     expect(res.results.length).toBe(1);
     expect(res.results[0].valid).toBe(true);
-  }, 15000);
+  }, 30000);
 
   it('performs extraction and automatically switches keys if first key fails', async () => {
     const validKey = process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY_1;

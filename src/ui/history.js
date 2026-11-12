@@ -7,15 +7,28 @@
 
 import { getAllCardsLocal, getPendingCards, markCardSynced, deleteCardLocal, saveCardLocal } from '../db.js';
 import { saveRecord, listCardsFromDB, deleteCardFromDB } from '../api.js';
+import { syncCardsWithCloud } from '../sync.js';
 import { setPendingCount } from '../store.js';
 import { groupCardsByCategory, getCategories, addCategory, setCurrentCategory, getCurrentCategory } from '../categories.js';
 import { openModal, openImageZoomModal } from './modal.js';
 import { showToast } from './toast.js';
 
 export async function renderHistory(container) {
-  const cards = await getAllCardsLocal();
-  const pendingCards = cards.filter(c => c.status === 'pending');
+  let cards = await getAllCardsLocal();
+  let pendingCards = cards.filter(c => c.status === 'pending');
   setPendingCount(pendingCards.length);
+
+  // Background Auto-Sync: pull latest cards from TiDB Cloud so other devices immediately see new scans
+  if (navigator.onLine) {
+    syncCardsWithCloud().then(async (res) => {
+      if (res && res.imported > 0) {
+        cards = await getAllCardsLocal();
+        pendingCards = cards.filter(c => c.status === 'pending');
+        setPendingCount(pendingCards.length);
+        renderView();
+      }
+    }).catch(console.warn);
+  }
 
   // Screen state
   let viewMode = 'categories'; // 'categories' | 'all'
@@ -481,7 +494,7 @@ export async function renderHistory(container) {
       };
     }
 
-    // Fetch from TiDB Cloud handler
+    // Fetch & Sync with TiDB Cloud handler
     const fetchTiDbBtn = container.querySelector('#fetch-tidb-btn');
     if (fetchTiDbBtn) {
       fetchTiDbBtn.onclick = async () => {
@@ -491,20 +504,18 @@ export async function renderHistory(container) {
         }
 
         fetchTiDbBtn.setAttribute('disabled', 'true');
-        showToast('Fetching cards from TiDB Cloud...', 'info', 2000);
+        showToast('Syncing with TiDB Cloud database...', 'info', 2000);
 
         try {
-          const res = await listCardsFromDB();
-          const dbCards = res.cards || [];
-          let imported = 0;
-          for (const c of dbCards) {
-            await saveCardLocal(c);
-            imported++;
-          }
-          showToast(`Synced ${imported} card(s) from TiDB Cloud!`, 'success', 3000);
-          renderHistory(container);
+          const res = await syncCardsWithCloud();
+          cards = await getAllCardsLocal();
+          pendingCards = cards.filter(c => c.status === 'pending');
+          setPendingCount(pendingCards.length);
+          const newMsg = res.imported > 0 ? ` (${res.imported} new)` : '';
+          showToast(`Synced with TiDB Cloud! ${cards.length} total card(s)${newMsg}`, 'success', 3000);
+          renderView();
         } catch (err) {
-          showToast(`TiDB fetch failed: ${err.message}`, 'error');
+          showToast(`TiDB sync failed: ${err.message}`, 'error');
         } finally {
           fetchTiDbBtn.removeAttribute('disabled');
         }

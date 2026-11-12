@@ -47,8 +47,10 @@ export function getDB() {
  */
 export async function saveCardLocal(card) {
   const db = await getDB();
+  if (!db) return card;
   const item = {
     ...card,
+    createdAt: card.createdAt || card.record?.timestamp || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
   await db.put('cards', item);
@@ -60,6 +62,7 @@ export async function saveCardLocal(card) {
  */
 export async function getCardLocal(id) {
   const db = await getDB();
+  if (!db) return null;
   return db.get('cards', id);
 }
 
@@ -68,8 +71,17 @@ export async function getCardLocal(id) {
  */
 export async function getAllCardsLocal() {
   const db = await getDB();
-  const all = await db.getAllFromIndex('cards', 'by-createdAt');
-  return all.reverse();
+  if (!db) return [];
+  try {
+    const all = await db.getAllFromIndex('cards', 'by-createdAt');
+    if (all && all.length > 0) return all.reverse();
+  } catch (_) {}
+  try {
+    const fallbackAll = await db.getAll('cards');
+    return (fallbackAll || []).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  } catch (_) {
+    return [];
+  }
 }
 
 /**

@@ -12,6 +12,7 @@ import { getState, subscribe, setPendingCount } from './store.js';
 import { getPendingCards, markCardSynced } from './db.js';
 import { saveRecord, getKnowledgeRules } from './api.js';
 import { initKnowledge, syncKnowledgeFromBackend } from './knowledge.js';
+import { syncCardsWithCloud } from './sync.js';
 import { showToast } from './ui/toast.js';
 
 // Route Definitions
@@ -193,7 +194,7 @@ function init() {
   window.addEventListener('online', () => {
     updateHeaderState();
     showToast('Internet connection restored.', 'info', 2000);
-    autoSyncPendingCards();
+    syncCardsWithCloud().catch(console.warn);
   });
 
   window.addEventListener('offline', () => {
@@ -253,9 +254,9 @@ function init() {
       .catch(() => {});
   }
 
-  // Attempt auto-sync at startup if online
+  // Attempt auto-sync at startup if online: uploads pending scans & pulls cloud contacts across all devices
   if (navigator.onLine) {
-    autoSyncPendingCards();
+    syncCardsWithCloud().catch(console.warn);
   }
 }
 
