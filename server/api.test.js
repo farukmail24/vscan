@@ -78,6 +78,30 @@ describe('TiDB Cloud Backend API Suite', () => {
     expect(found.record.designation).toBe('Chief Executive Officer');
   });
 
+  it('updates category and filters cards by category', async () => {
+    await handleApiRequest('update', {
+      id: testId,
+      record: {
+        category: 'GTD EXPO'
+      }
+    });
+
+    const res = await handleApiRequest('listCards', { category: 'GTD EXPO' });
+    expect(res.ok).toBe(true);
+    const found = res.cards.find(c => c.id === testId);
+    expect(found).toBeDefined();
+    expect(found.record.category).toBe('GTD EXPO');
+  });
+
+  it('lists categories with aggregate contact counts from TiDB', async () => {
+    const res = await handleApiRequest('listCategories');
+    expect(res.ok).toBe(true);
+    expect(Array.isArray(res.categories)).toBe(true);
+    const gtd = res.categories.find(c => c.category === 'GTD EXPO');
+    expect(gtd).toBeDefined();
+    expect(gtd.card_count).toBeGreaterThan(0);
+  });
+
   it('retrieves knowledge rules from TiDB', async () => {
     const res = await handleApiRequest('getKnowledge');
     expect(res.ok).toBe(true);
@@ -103,7 +127,7 @@ describe('TiDB Cloud Backend API Suite', () => {
     expect(res.ok).toBe(true);
     expect(res.results.length).toBe(1);
     expect(res.results[0].valid).toBe(true);
-  });
+  }, 15000);
 
   it('performs extraction and automatically switches keys if first key fails', async () => {
     const validKey = process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY_1;
@@ -120,7 +144,7 @@ describe('TiDB Cloud Backend API Suite', () => {
     expect(res.data).toBeDefined();
     expect(res.usedKeyIndex).toBe(1); // Successfully failed over to 2nd key!
     expect(res.keySwitched).toBe(true);
-  }, 25000);
+  }, 45000);
 
   it('deletes the test card cleanly', async () => {
     const res = await handleApiRequest('deleteCard', { id: testId });

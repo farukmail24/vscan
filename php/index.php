@@ -282,6 +282,7 @@ try {
             $address = $record['address'] ?? '';
             $notes = $record['notes'] ?? '';
             $tags = is_array($record['tags'] ?? null) ? implode(', ', $record['tags']) : ($record['tags'] ?? '');
+            $category = trim($record['category'] ?? $payload['category'] ?? 'General') ?: 'General';
 
             $frontImage = $payload['frontImageBase64'] ?? $record['frontImageUrl'] ?? $record['frontBase64'] ?? null;
             $backImage = $payload['backImageBase64'] ?? $record['backImageUrl'] ?? $record['backBase64'] ?? null;
@@ -293,12 +294,12 @@ try {
             $sql = "INSERT INTO cards (
                 id, timestamp, name, designation, company,
                 phone1, phone2, email, website, address,
-                notes, tags, front_image, back_image,
+                notes, tags, category, front_image, back_image,
                 source, needs_review, scanned_by
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
                 ?, ?, ?
             ) ON DUPLICATE KEY UPDATE
                 timestamp = VALUES(timestamp),
@@ -312,6 +313,7 @@ try {
                 address = VALUES(address),
                 notes = VALUES(notes),
                 tags = VALUES(tags),
+                category = VALUES(category),
                 front_image = COALESCE(VALUES(front_image), front_image),
                 back_image = COALESCE(VALUES(back_image), back_image),
                 source = VALUES(source),
@@ -325,10 +327,10 @@ try {
 
             mysqli_stmt_bind_param(
                 $stmt,
-                'sssssssssssssssis',
+                'ssssssssssssssssis',
                 $id, $timestamp, $name, $designation, $company,
                 $phone1, $phone2, $email, $website, $address,
-                $notes, $tags, $frontImage, $backImage,
+                $notes, $tags, $category, $frontImage, $backImage,
                 $source, $needsReview, $scannedBy
             );
 
@@ -368,6 +370,9 @@ try {
 
             if (isset($record['tags'])) {
                 $map['tags'] = is_array($record['tags']) ? implode(', ', $record['tags']) : $record['tags'];
+            }
+            if (isset($record['category'])) {
+                $map['category'] = trim($record['category'] ?: 'General');
             }
             if (isset($record['phones']) && is_array($record['phones'])) {
                 $map['phone1'] = $record['phones'][0] ?? '';
@@ -411,22 +416,35 @@ try {
             $conn = getDbConnection();
             $limit = min((int)($payload['limit'] ?? 100), 500);
             $search = trim($payload['search'] ?? '');
+            $category = trim($payload['category'] ?? '');
 
             $sql = "SELECT id, timestamp, name, designation, company, phone1, phone2,
-                           email, website, address, notes, tags, source, needs_review, scanned_by,
+                           email, website, address, notes, tags, COALESCE(category, 'General') AS category,
+                           source, needs_review, scanned_by,
                            created_at, updated_at
                     FROM cards";
 
+            $where = [];
             $params = [];
             $types = '';
 
+            if ($category !== '' && strtolower($category) !== 'all') {
+                $where[] = "LOWER(COALESCE(category, 'General')) = ?";
+                $types .= 's';
+                $params[] = strtolower($category);
+            }
+
             if ($search !== '') {
-                $sql .= " WHERE LOWER(name) LIKE ? OR LOWER(company) LIKE ?
+                $where[] = "(LOWER(name) LIKE ? OR LOWER(company) LIKE ?
                           OR LOWER(designation) LIKE ? OR phone1 LIKE ? OR phone2 LIKE ?
-                          OR LOWER(email) LIKE ?";
+                          OR LOWER(email) LIKE ? OR LOWER(COALESCE(category, 'General')) LIKE ?)";
                 $wildcard = "%" . strtolower($search) . "%";
-                $types = 'ssssss';
-                $params = [$wildcard, $wildcard, $wildcard, $wildcard, $wildcard, $wildcard];
+                $types .= 'sssssss';
+                $params = array_merge($params, [$wildcard, $wildcard, $wildcard, $wildcard, $wildcard, $wildcard, $wildcard]);
+            }
+
+            if (!empty($where)) {
+                $sql .= " WHERE " . implode(' AND ', $where);
             }
 
             $sql .= " ORDER BY created_at DESC LIMIT ?";
@@ -456,15 +474,33 @@ try {
                         'address' => $r['address'],
                         'notes' => $r['notes'],
                         'tags' => !empty($r['tags']) ? array_map('trim', explode(',', $r['tags'])) : [],
+                        'category' => $r['category'] ?? 'General',
                         'source' => $r['source'],
                         'needsReview' => (bool)$r['needs_review'],
                         'scannedBy' => $r['scanned_by']
                     ],
+                    'category' => $r['category'] ?? 'General',
                     'source' => $r['source'],
                     'status' => 'synced',
                     'createdAt' => $r['created_at']
                 ];
             }
+
+            jsonResponse(['ok' => true, 'cards' => $cards, 'count' => count($cards)]);
+            break;
+
+        case 'listCategories':
+        case 'getCategories':
+            $conn = getDbConnection();
+            $res = mysqli_query($conn, "SELECT COALESCE(category, 'General') as category, COUNT(*) as card_count, MAX(created_at) as last_scanned_at FROM cards GROUP BY COALESCE(category, 'General') ORDER BY last_scanned_at DESC");
+            $categories = [];
+            if ($res) {
+                while ($r = mysqli_fetch_assoc($res)) {
+                    $categories[] = $r;
+                }
+            }
+            jsonResponse(['ok' => true, 'categories' => $categories]);
+            break;
 
             jsonResponse(['ok' => true, 'cards' => $cards, 'count' => count($cards)]);
             break;

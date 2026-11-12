@@ -379,6 +379,7 @@ async function handleSave(payload) {
   const email = Array.isArray(record.emails) ? record.emails[0] : (record.email || '');
   const website = Array.isArray(record.websites) ? record.websites[0] : (record.website || '');
   const tags = Array.isArray(record.tags) ? record.tags.join(', ') : (record.tags || '');
+  const category = (record.category || payload.category || 'General').trim() || 'General';
 
   const frontImage = payload.frontImageBase64 || record.frontImageUrl || record.frontBase64 || null;
   const backImage = payload.backImageBase64 || record.backImageUrl || record.backBase64 || null;
@@ -388,12 +389,12 @@ async function handleSave(payload) {
     INSERT INTO cards (
       id, timestamp, name, designation, company,
       phone1, phone2, email, website, address,
-      notes, tags, front_image, back_image,
+      notes, tags, category, front_image, back_image,
       source, needs_review, scanned_by
     ) VALUES (
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
       ?, ?, ?
     ) ON DUPLICATE KEY UPDATE
       timestamp = VALUES(timestamp),
@@ -407,6 +408,7 @@ async function handleSave(payload) {
       address = VALUES(address),
       notes = VALUES(notes),
       tags = VALUES(tags),
+      category = VALUES(category),
       front_image = COALESCE(VALUES(front_image), front_image),
       back_image = COALESCE(VALUES(back_image), back_image),
       source = VALUES(source),
@@ -427,6 +429,7 @@ async function handleSave(payload) {
     record.address || '',
     record.notes || '',
     tags,
+    category,
     frontImage,
     backImage,
     record.source || 'AI',
@@ -464,6 +467,7 @@ async function handleUpdate(payload) {
     address: record.address,
     notes: record.notes,
     tags: Array.isArray(record.tags) ? record.tags.join(', ') : record.tags,
+    category: record.category ? String(record.category).trim() : undefined,
     scanned_by: record.scannedBy
   };
 
@@ -505,23 +509,35 @@ async function handleUpdate(payload) {
 async function handleListCards(payload = {}) {
   const limit = Math.min(parseInt(payload.limit || '100', 10), 500);
   const search = (payload.search || '').trim().toLowerCase();
+  const category = (payload.category || '').trim();
 
   let query = `
     SELECT id, timestamp, name, designation, company, phone1, phone2,
-           email, website, address, notes, tags, source, needs_review, scanned_by,
+           email, website, address, notes, tags, COALESCE(category, 'General') AS category,
+           source, needs_review, scanned_by,
            created_at, updated_at
     FROM cards
   `;
   const params = [];
+  const whereClauses = [];
+
+  if (category && category.toLowerCase() !== 'all') {
+    whereClauses.push(`LOWER(COALESCE(category, 'General')) = ?`);
+    params.push(category.toLowerCase());
+  }
 
   if (search) {
-    query += `
-      WHERE LOWER(name) LIKE ? OR LOWER(company) LIKE ?
-         OR LOWER(designation) LIKE ? OR phone1 LIKE ? OR phone2 LIKE ?
-         OR LOWER(email) LIKE ?
-    `;
+    whereClauses.push(`(
+      LOWER(name) LIKE ? OR LOWER(company) LIKE ?
+      OR LOWER(designation) LIKE ? OR phone1 LIKE ? OR phone2 LIKE ?
+      OR LOWER(email) LIKE ? OR LOWER(COALESCE(category, 'General')) LIKE ?
+    )`);
     const wildcard = `%${search}%`;
-    params.push(wildcard, wildcard, wildcard, wildcard, wildcard, wildcard);
+    params.push(wildcard, wildcard, wildcard, wildcard, wildcard, wildcard, wildcard);
+  }
+
+  if (whereClauses.length > 0) {
+    query += ` WHERE ` + whereClauses.join(' AND ');
   }
 
   query += ` ORDER BY created_at DESC LIMIT ?`;
@@ -543,16 +559,31 @@ async function handleListCards(payload = {}) {
       address: r.address,
       notes: r.notes,
       tags: r.tags ? r.tags.split(',').map(t => t.trim()) : [],
+      category: r.category || 'General',
       source: r.source,
       needsReview: Boolean(r.needs_review),
       scannedBy: r.scanned_by
     },
+    category: r.category || 'General',
     source: r.source,
     status: 'synced',
     createdAt: r.created_at
   }));
 
   return { ok: true, cards, count: cards.length };
+}
+
+/**
+ * List categories with contact counts
+ */
+async function handleListCategories() {
+  const [rows] = await pool.query(`
+    SELECT COALESCE(category, 'General') as category, COUNT(*) as card_count, MAX(created_at) as last_scanned_at
+    FROM cards
+    GROUP BY COALESCE(category, 'General')
+    ORDER BY last_scanned_at DESC
+  `);
+  return { ok: true, categories: rows };
 }
 
 /**
@@ -606,6 +637,10 @@ export async function handleApiRequest(action, payload = {}) {
     case 'listCards':
     case 'getCards':
       return handleListCards(payload);
+
+    case 'listCategories':
+    case 'getCategories':
+      return handleListCategories();
 
     case 'deleteCard':
       return handleDeleteCard(payload);

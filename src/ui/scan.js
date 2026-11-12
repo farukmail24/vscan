@@ -11,12 +11,15 @@ import { autoDetectAndCrop } from '../cropper.js';
 import { openCardCropper } from './cropperModal.js';
 import { getSettings, updateSetting } from '../settings.js';
 import { setCurrentScan, getState } from '../store.js';
+import { getCategories, getCurrentCategory, setCurrentCategory, addCategory } from '../categories.js';
 import { showToast } from './toast.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 export function renderScan(container) {
   const settings = getSettings();
   const state = getState();
+  let currentCategory = getCurrentCategory();
+  let categories = getCategories();
 
   let frontBlob = null;
   let frontBase64 = null;
@@ -71,6 +74,36 @@ export function renderScan(container) {
             Batch active: ${state.batchCount} card${state.batchCount > 1 ? 's' : ''} saved in this session
           </div>
         ` : ''}
+      </div>
+
+      <!-- Category / Event Selection Panel -->
+      <div class="card-panel" style="padding: 12px 16px; margin-bottom: 14px; border-color: rgba(59, 130, 246, 0.4); background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(16, 185, 129, 0.04));">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px;">
+            <div style="width: 36px; height: 36px; border-radius: var(--radius-md); background: rgba(59, 130, 246, 0.15); display: flex; align-items: center; justify-content: center; color: var(--accent-blue); flex-shrink: 0;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </div>
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+                <label class="form-label" for="scan-category-select" style="margin: 0; font-size: 0.72rem; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.5px;">
+                  Event / Category
+                </label>
+                <span id="active-category-badge" class="category-pill-badge">${escapeHtml(currentCategory)}</span>
+              </div>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <select id="scan-category-select" class="form-select" style="padding: 4px 8px; font-size: 0.84rem; font-weight: 600; flex: 1;">
+                  ${categories.map(c => `<option value="${escapeHtml(c)}" ${c.toLowerCase() === currentCategory.toLowerCase() ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                </select>
+                <button type="button" id="scan-add-category-btn" class="btn btn-secondary btn-sm" style="padding: 4px 10px; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;" title="Add a new event or category">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  New
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Front Capture Card -->
@@ -251,6 +284,38 @@ export function renderScan(container) {
     updateSetting('batchMode', batchToggle.checked);
     showToast(`Batch mode ${batchToggle.checked ? 'enabled' : 'disabled'}`, 'info', 2000);
   });
+
+  // Category & Event selector handles
+  const categorySelect = container.querySelector('#scan-category-select');
+  const addCategoryBtn = container.querySelector('#scan-add-category-btn');
+  const categoryBadge = container.querySelector('#active-category-badge');
+
+  if (categorySelect) {
+    categorySelect.addEventListener('change', () => {
+      const selected = categorySelect.value;
+      setCurrentCategory(selected);
+      currentCategory = selected;
+      if (categoryBadge) categoryBadge.textContent = selected;
+      showToast(`Category set to: ${selected}`, 'info', 1500);
+    });
+  }
+
+  if (addCategoryBtn) {
+    addCategoryBtn.addEventListener('click', () => {
+      const name = prompt('Enter new Event / Category name (e.g. GTD EXPO, Dhaka Tech Fair):');
+      if (name && name.trim()) {
+        const added = addCategory(name.trim());
+        setCurrentCategory(added);
+        currentCategory = added;
+        categories = getCategories();
+        categorySelect.innerHTML = categories.map(c =>
+          `<option value="${escapeHtml(c)}" ${c.toLowerCase() === added.toLowerCase() ? 'selected' : ''}>${escapeHtml(c)}</option>`
+        ).join('');
+        if (categoryBadge) categoryBadge.textContent = added;
+        showToast(`Category "${added}" created & active!`, 'success', 2000);
+      }
+    });
+  }
 
   // Front file triggers
   container.querySelector('#front-snap-btn').onclick = () => frontCamInput.click();
@@ -491,10 +556,13 @@ export function renderScan(container) {
       extractedData.uncertain_fields = Array.from(uncertainList);
 
       // Save into store and navigate to Review
+      const chosenCategory = getCurrentCategory();
+      extractedData.category = chosenCategory;
       const scanId = 'card_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
       setCurrentScan({
         id: scanId,
         record: extractedData,
+        category: chosenCategory,
         frontBase64,
         backBase64,
         frontBlob,
@@ -517,4 +585,13 @@ export function renderScan(container) {
       extractBtn.removeAttribute('disabled');
     }
   };
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

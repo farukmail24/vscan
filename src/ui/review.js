@@ -9,6 +9,7 @@ import { saveRecord, checkDuplicate } from '../api.js';
 import { saveCardLocal, saveCompanyLayout, getCompanyLayout } from '../db.js';
 import { recordLearnedCorrection } from '../knowledge.js';
 import { getSettings } from '../settings.js';
+import { getCategories, addCategory, getCurrentCategory } from '../categories.js';
 import { openImageZoomModal } from './modal.js';
 import { showToast } from './toast.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
@@ -17,6 +18,8 @@ export function renderReview(container) {
   const state = getState();
   const settings = getSettings();
   const currentScan = state.currentScan;
+  const allCategories = getCategories();
+  const defaultCategory = (currentScan && (currentScan.category || currentScan.record?.category)) || getCurrentCategory();
 
   if (!currentScan || !currentScan.record) {
     container.innerHTML = `
@@ -242,6 +245,23 @@ export function renderReview(container) {
           <textarea id="field-notes" class="form-textarea" rows="2" placeholder="Services, branches, slogans...">${escapeHtml(record.notes || '')}</textarea>
         </div>
 
+        <!-- Event / Category Folder -->
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label class="form-label" for="field-category" style="margin: 0; display: inline-flex; align-items: center; gap: 6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent-blue);">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>Event / Category</span>
+            </label>
+            <span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 600;">Grouping Folder</span>
+          </div>
+          <input type="text" id="field-category" class="form-input" list="review-categories-list" value="${escapeHtml(defaultCategory)}" placeholder="e.g. GTD EXPO" />
+          <datalist id="review-categories-list">
+            ${allCategories.map(c => `<option value="${escapeHtml(c)}"></option>`).join('')}
+          </datalist>
+        </div>
+
         <!-- Tags -->
         <div class="form-group">
           <label class="form-label" for="field-tags">Tags (Comma-separated)</label>
@@ -253,8 +273,9 @@ export function renderReview(container) {
           <button type="button" id="discard-btn" class="btn btn-secondary">
             Discard
           </button>
-          <button type="submit" id="save-btn" class="btn btn-primary">
-            Save to Sheet
+          <button type="submit" id="save-btn" class="btn btn-primary" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            Save Contact
           </button>
         </div>
       </form>
@@ -378,6 +399,9 @@ export function renderReview(container) {
     const addrVal = container.querySelector('#field-address').value.trim();
     const notesVal = container.querySelector('#field-notes').value.trim();
     const tagsVal = container.querySelector('#field-tags').value.trim();
+    const categoryField = container.querySelector('#field-category');
+    const catVal = (categoryField ? categoryField.value.trim() : '') || defaultCategory || 'General';
+    addCategory(catVal);
 
     // Determine Needs Review status:
     // If any field was originally uncertain and user did not alter it
@@ -403,6 +427,7 @@ export function renderReview(container) {
       address: addrVal,
       notes: notesVal,
       tags: tagsVal,
+      category: catVal,
       source: source,
       needsReview: needsReview,
       scannedBy: settings.scannedBy || 'Mobile User'
@@ -452,6 +477,7 @@ export function renderReview(container) {
         await saveCardLocal({
           id,
           record: compiledRecord,
+          category: catVal,
           frontBase64,
           backBase64,
           source,
@@ -468,6 +494,7 @@ export function renderReview(container) {
         await saveCardLocal({
           id,
           record: compiledRecord,
+          category: catVal,
           frontBase64,
           backBase64,
           source,

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS cards (
   address TEXT NULL,
   notes TEXT NULL,
   tags VARCHAR(500) NULL,
+  category VARCHAR(255) DEFAULT 'General',
   front_image LONGTEXT NULL,
   back_image LONGTEXT NULL,
   source VARCHAR(50) DEFAULT 'AI',
@@ -30,7 +31,8 @@ CREATE TABLE IF NOT EXISTS cards (
   INDEX idx_cards_name (name),
   INDEX idx_cards_company (company),
   INDEX idx_cards_email (email),
-  INDEX idx_cards_phone1 (phone1)
+  INDEX idx_cards_phone1 (phone1),
+  INDEX idx_cards_category (category)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. Knowledge Rules Table (Replaces Sheet tab "Rules" for dynamic learning)

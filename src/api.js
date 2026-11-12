@@ -229,8 +229,15 @@ export async function getKnowledgeRules() {
 /**
  * Fetch saved cards from TiDB database
  */
-export async function listCardsFromDB(search = '', limit = 100) {
-  return callBackend('listCards', { search, limit });
+export async function listCardsFromDB(search = '', limit = 100, category = '') {
+  return callBackend('listCards', { search, limit, category });
+}
+
+/**
+ * Fetch category summary list from TiDB
+ */
+export async function listCategoriesFromDB() {
+  return callBackend('listCategories');
 }
 
 /**
