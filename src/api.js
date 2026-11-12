@@ -37,14 +37,15 @@ export function getCandidateEndpoints() {
                       hostname.includes('render.com') ||
                       hostname.includes('github.io');
 
-  if (isVite || isCloudHost) {
-    // Under Vite dev server or Vercel / Cloud serverless hosting
+  if (isCloudHost) {
+    // Under Vercel / Netlify / Cloud serverless hosting (HTTPS only, standard relative API route)
+    candidates.push('/api');
+  } else if (isVite) {
+    // Under Vite local dev server
     candidates.push('/api');
     candidates.push(`http://${hostname}:3000/api`);
-    if (!isCloudHost) {
-      candidates.push(`http://${hostname}/vscan/api/index.php`);
-      candidates.push('/vscan/api/index.php');
-    }
+    candidates.push(`http://${hostname}/vscan/api/index.php`);
+    candidates.push('/vscan/api/index.php');
   } else {
     // Under Apache / XAMPP / Local Production
     candidates.push('/vscan/api/');
@@ -130,6 +131,22 @@ export async function callBackend(action, payload = {}) {
           throw new Error(result.error);
         }
       } else {
+        // Read detailed error returned by backend (e.g. Gemini quota, DB validation)
+        let detailedError = '';
+        try {
+          const errText = await response.text();
+          try {
+            const errJson = JSON.parse(errText);
+            if (errJson && errJson.error) detailedError = errJson.error;
+          } catch (_) {
+            if (errText && errText.length < 200) detailedError = errText;
+          }
+        } catch (_) {}
+
+        if (detailedError) {
+          cachedWorkingEndpoint = url;
+          throw new Error(detailedError);
+        }
         errors.push(`${url}: HTTP ${response.status}`);
       }
     } catch (err) {

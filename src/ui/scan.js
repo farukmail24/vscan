@@ -490,20 +490,17 @@ export function renderScan(container) {
           }
         } catch (aiErr) {
           console.warn('AI Extraction error:', aiErr);
-          if (currentMode === 'auto') {
-            showToast(`AI extraction failed (${aiErr.message}). Falling back to Offline OCR...`, 'warning', 4000);
-            updateProgress(30, 'Falling back to offline OCR...', 'Initializing local models');
-            const chosenLang = ocrLangSelect ? ocrLangSelect.value : (settings.ocrLang || 'auto');
-            const offlineRes = await extractOffline(frontMeta.canvas, (pct, msg) => {
-              updateProgress(pct, msg, 'Self-hosted Tesseract & jsQR');
-            }, chosenLang);
-            extractedData = offlineRes.data;
-            source = offlineRes.source;
-            ocrLines = offlineRes.lines;
-            ocrText = offlineRes.text;
-          } else {
-            throw aiErr;
-          }
+          const aiErrMsg = aiErr.message || 'AI service unavailable';
+          showToast(`AI extraction unavailable. Switching to Offline OCR...`, 'warning', 4500);
+          updateProgress(30, 'Processing with offline OCR...', 'Self-hosted Tesseract & jsQR');
+          const chosenLang = ocrLangSelect ? ocrLangSelect.value : (settings.ocrLang || 'auto');
+          const offlineRes = await extractOffline(frontMeta.canvas, (pct, msg) => {
+            updateProgress(pct, msg, 'Self-hosted Tesseract & jsQR');
+          }, chosenLang);
+          extractedData = offlineRes.data;
+          source = currentMode === 'auto' ? offlineRes.source : 'Offline (AI Fallback)';
+          ocrLines = offlineRes.lines;
+          ocrText = offlineRes.text;
         }
       } else {
         // Offline OCR mode

@@ -82,17 +82,23 @@ async function resolveGeminiKeys(payload = {}) {
 async function handleTestGeminiKeys(payload = {}) {
   const keys = await resolveGeminiKeys(payload);
   const results = [];
+  const candidateModels = [
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-3-flash-preview',
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash'
+  ];
 
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    const candidateModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
     let success = false;
     let errorDetail = '';
     let workingModel = '';
 
     for (const model of candidateModels) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
+      const timer = setTimeout(() => controller.abort(), 8000);
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
         const res = await fetch(url, {
@@ -225,15 +231,22 @@ Return ONLY valid JSON matching this schema:
   let usedKeyIndex = -1;
   let usedModel = '';
 
+  const candidateModels = [
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-3-flash-preview',
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash'
+  ];
+
   for (let i = 0; i < keys.length; i++) {
     const apiKey = keys[i];
-    const candidateModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
     let keySucceeded = false;
 
     for (const model of candidateModels) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 25000);
+      const timer = setTimeout(() => controller.abort(), 12000);
 
       try {
         const response = await fetch(url, {
@@ -264,16 +277,12 @@ Return ONLY valid JSON matching this schema:
             errMsg += `: ${errText.slice(0, 100)}`;
           }
 
-          if (response.status === 429 || response.status === 403) {
-            keyErrors.push(`Key #${i + 1} (${maskApiKey(apiKey)}) hit quota/rate limit [${errMsg}]. Switching to next key.`);
-            break; // Move to next key immediately
-          } else {
-            keyErrors.push(`Key #${i + 1} (${maskApiKey(apiKey)}) with ${model}: ${errMsg}`);
-          }
+          keyErrors.push(`Key #${i + 1} (${maskApiKey(apiKey)}) [${model}]: ${errMsg}`);
+          // Continue loop to try other candidate models for this key
         }
       } catch (fetchErr) {
         clearTimeout(timer);
-        keyErrors.push(`Key #${i + 1} (${maskApiKey(apiKey)}) network error: ${fetchErr.message}`);
+        keyErrors.push(`Key #${i + 1} (${maskApiKey(apiKey)}) [${model}] error: ${fetchErr.message}`);
       }
     }
 
@@ -284,7 +293,7 @@ Return ONLY valid JSON matching this schema:
 
   if (!successfulData) {
     throw new Error(
-      `All ${keys.length} Gemini API keys failed or exceeded quota:\n` + keyErrors.join('\n')
+      `All Gemini API keys and models failed:\n` + keyErrors.join('\n')
     );
   }
 
